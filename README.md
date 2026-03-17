@@ -21,6 +21,9 @@ It is designed for:
 - `deploy/Install-TradeNetClient.ps1`: renders local `TradeNet.Config.psd1` and
   `TradeNet.SplitRouting.psd1`
 - `deploy/Setup-TradeNet.ps1`: one-command server + client bootstrap
+- `contrib/hysteria2.sh`: standalone Hysteria2 installer provided as an additional
+  reference script
+- `doc/`: supplementary installation notes and operator-facing reference documents
 
 ## Quick start
 
@@ -75,3 +78,18 @@ Real secrets are intentionally excluded from git:
 - `logs/`, `state/`, `mihomo/`, `artifacts/`
 
 Only example profiles and templates are committed.
+
+## Additional scripts
+
+`contrib/hysteria2.sh` is included as a standalone Hysteria2 deployment script.
+It is not part of the default `TradeNet` deployment path.
+
+Use it when you want a separate Hysteria2 node workflow with:
+
+- automatic Hysteria2 installation
+- certificate generation
+- firewall setup
+- client config rendering
+
+Review it before production use. It resets firewall rules, rewrites `sysctl`
+network settings, and is opinionated about SNI, obfuscation, and BBR removal.
