@@ -1,4 +1,4 @@
-[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
+﻿[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 Set-StrictMode -Version Latest
 
@@ -49,6 +49,11 @@ function Get-TradeNetConfig {
         AutoRestartEnabled    = $false
         AutoRestartThreshold  = 3
         AutoRestartCooldown   = 20
+        WatchdogTaskName      = "TradeNet-Watchdog"
+        WatchdogStartupDelaySeconds = 20
+        WatchdogRestartIntervalMinutes = 1
+        WatchdogRestartCount  = 999
+        WatchdogIgnoreManualStopOnBoot = $true
         OpenWireGuardGui      = $true
         OpenPingWindows       = $true
         PingTargets           = @(
@@ -865,4 +870,133 @@ function Stop-TradeNetStack {
     Stop-TradeNetUdp2raw -Config $Config -LogPath $LogPath
     Stop-TradeNetPingWindows -Config $Config -LogPath $LogPath
     Clear-TradeNetState -Config $Config
+}
+
+function ConvertTo-TradeNetTaskDelay {
+    param([int]$Seconds)
+
+    $safeSeconds = [math]::Max(0, $Seconds)
+    $hours = [math]::Floor($safeSeconds / 3600)
+    $minutes = [math]::Floor(($safeSeconds % 3600) / 60)
+    $remainingSeconds = $safeSeconds % 60
+    return "PT{0}H{1}M{2}S" -f $hours, $minutes, $remainingSeconds
+}
+
+function Get-TradeNetWatchdogTaskStatus {
+    param([pscustomobject]$Config)
+
+    $taskName = [string]$Config.WatchdogTaskName
+    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if (-not $task) {
+        return [pscustomobject]@{
+            Exists         = $false
+            TaskName       = $taskName
+            State          = "NotInstalled"
+            Enabled        = $false
+            LastRunTime    = $null
+            NextRunTime    = $null
+            LastTaskResult = $null
+            Summary        = "未安装"
+        }
+    }
+
+    $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+    $state = [string]$task.State
+    $enabled = $state -ne "Disabled"
+    $lastTaskResult = if ($taskInfo) { $taskInfo.LastTaskResult } else { $null }
+    $lastResultText = if ($null -eq $lastTaskResult) {
+        "N/A"
+    } else {
+        "0x{0:X8}" -f ([uint32]$lastTaskResult)
+    }
+    $lastRunText = if ($taskInfo -and $taskInfo.LastRunTime -and $taskInfo.LastRunTime.Year -gt 2000) {
+        $taskInfo.LastRunTime.ToString("yyyy-MM-dd HH:mm:ss")
+    } else {
+        "未运行"
+    }
+
+    return [pscustomobject]@{
+        Exists         = $true
+        TaskName       = $taskName
+        State          = $state
+        Enabled        = $enabled
+        LastRunTime    = if ($taskInfo) { $taskInfo.LastRunTime } else { $null }
+        NextRunTime    = if ($taskInfo) { $taskInfo.NextRunTime } else { $null }
+        LastTaskResult = $lastTaskResult
+        Summary        = ("{0} | 最近运行: {1} | 结果: {2}" -f $state, $lastRunText, $lastResultText)
+    }
+}
+
+function Register-TradeNetWatchdogTask {
+    param(
+        [pscustomobject]$Config,
+        [switch]$Replace,
+        [switch]$StartNow
+    )
+
+    Assert-TradeNetAdministrator
+
+    $agentPath = Join-Path $Config.ScriptRoot "TradeNetAgent.ps1"
+    if (-not (Test-Path -LiteralPath $agentPath)) {
+        throw "未找到 TradeNetAgent.ps1: $agentPath"
+    }
+
+    $existingTask = Get-ScheduledTask -TaskName $Config.WatchdogTaskName -ErrorAction SilentlyContinue
+    if ($existingTask) {
+        if (-not $Replace) {
+            throw "开机守护任务已存在: $($Config.WatchdogTaskName)"
+        }
+
+        Stop-ScheduledTask -TaskName $Config.WatchdogTaskName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $Config.WatchdogTaskName -Confirm:$false
+    }
+
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $trigger.Delay = ConvertTo-TradeNetTaskDelay -Seconds ([int]$Config.WatchdogStartupDelaySeconds)
+
+    $restartIntervalMinutes = [math]::Max(1, [int]$Config.WatchdogRestartIntervalMinutes)
+    $restartCount = [math]::Max(1, [int]$Config.WatchdogRestartCount)
+    $settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit ([timespan]::Zero) `
+        -MultipleInstances IgnoreNew `
+        -RestartCount $restartCount `
+        -RestartInterval (New-TimeSpan -Minutes $restartIntervalMinutes) `
+        -StartWhenAvailable
+
+    $actionArgs = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -StartupMode' -f $agentPath
+    $action = New-ScheduledTaskAction `
+        -Execute "powershell.exe" `
+        -Argument $actionArgs
+
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $description = "TradeNet 后台守护。开机自启，并在后台保活 udp2raw + WireGuard。"
+
+    Register-ScheduledTask `
+        -TaskName $Config.WatchdogTaskName `
+        -Action $action `
+        -Trigger $trigger `
+        -Settings $settings `
+        -Principal $principal `
+        -Description $description `
+        -Force | Out-Null
+
+    if ($StartNow) {
+        Start-ScheduledTask -TaskName $Config.WatchdogTaskName
+    }
+
+    return Get-TradeNetWatchdogTaskStatus -Config $Config
+}
+
+function Unregister-TradeNetWatchdogTask {
+    param([pscustomobject]$Config)
+
+    Assert-TradeNetAdministrator
+
+    $task = Get-ScheduledTask -TaskName $Config.WatchdogTaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        Stop-ScheduledTask -TaskName $Config.WatchdogTaskName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $Config.WatchdogTaskName -Confirm:$false
+    }
 }

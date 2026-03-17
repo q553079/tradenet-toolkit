@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ProfilePath = (Join-Path (Split-Path $PSScriptRoot -Parent) "TradeNet.Deployment.psd1")
 )
 
@@ -52,6 +52,13 @@ $environment = [ordered]@{
     TRADENET_UDP2RAW_MODE           = $profile.Server.Udp2rawMode
     TRADENET_CLIENT_WG_HOST         = $profile.Server.ClientWireGuardHost
     TRADENET_CLIENT_WG_PORT         = [string]$profile.Server.ClientWireGuardPort
+    TRADENET_MANAGE_FIREWALL        = [string][bool]$profile.Server.Deployment.ManageFirewall
+    TRADENET_FIREWALL_BACKEND       = $profile.Server.Deployment.FirewallBackend
+    TRADENET_RESET_FIREWALL         = [string][bool]$profile.Server.Deployment.ResetFirewall
+    TRADENET_SSH_PORT               = [string]$profile.Server.Deployment.SshPort
+    TRADENET_MANAGE_SYSCTL          = [string][bool]$profile.Server.Deployment.ManageSysctl
+    TRADENET_APPLY_GATEWAY_TUNING   = [string][bool]$profile.Server.Deployment.ApplyGatewayTuning
+    TRADENET_VERIFY_AFTER_INSTALL   = [string][bool]$profile.Server.Deployment.VerifyAfterInstall
 }
 
 $job = [ordered]@{

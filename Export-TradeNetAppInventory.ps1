@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$OutputPath = (Join-Path $PSScriptRoot ("state\app-inventory_{0}.json" -f (Get-Date -Format "yyyy-MM-dd_HH-mm-ss")))
 )
 

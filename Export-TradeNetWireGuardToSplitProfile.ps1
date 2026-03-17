@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$TunnelName = "v1",
     [string]$ExamplePath = (Join-Path $PSScriptRoot "TradeNet.SplitRouting.example.psd1"),
     [string]$OutputProfilePath = (Join-Path $PSScriptRoot "TradeNet.SplitRouting.psd1")

@@ -1,4 +1,4 @@
-@{
+﻿@{
     MihomoExe        = "C:\Program Files\Clash Verge\verge-mihomo.exe"
     WorkingDirectory = "D:\TradeNet\mihomo"
     OutputConfigPath = "D:\TradeNet\mihomo\tradenet-split.yaml"

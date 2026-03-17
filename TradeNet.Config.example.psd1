@@ -1,4 +1,4 @@
-@{
+﻿@{
     # 复制为 TradeNet.Config.psd1 后生效。
     Udp2rawExe           = "D:\TradeNet\bin\udp2raw_mp.exe"
     Udp2rawDev           = "\Device\NPF_{CHANGE_ME}"
@@ -21,6 +21,11 @@
     AutoRestartEnabled   = $false
     AutoRestartThreshold = 3
     AutoRestartCooldown  = 20
+    WatchdogTaskName     = "TradeNet-Watchdog"
+    WatchdogStartupDelaySeconds = 20
+    WatchdogRestartIntervalMinutes = 1
+    WatchdogRestartCount = 999
+    WatchdogIgnoreManualStopOnBoot = $true
 
     OpenWireGuardGui     = $true
     OpenPingWindows      = $true

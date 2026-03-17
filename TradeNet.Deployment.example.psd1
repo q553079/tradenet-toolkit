@@ -1,4 +1,4 @@
-@{
+﻿@{
     Server = @{
         Host                  = "203.0.113.10"
         Port                  = 22
@@ -24,6 +24,15 @@
         Udp2rawMode           = "faketcp"
         ClientWireGuardHost   = "127.0.0.1"
         ClientWireGuardPort   = 24008
+        Deployment            = @{
+            ManageFirewall     = $true
+            FirewallBackend    = "auto"
+            ResetFirewall      = $false
+            SshPort            = 22
+            ManageSysctl       = $true
+            ApplyGatewayTuning = $true
+            VerifyAfterInstall = $true
+        }
     }
 
     Client = @{
@@ -36,6 +45,21 @@
         MihomoExe            = "C:\Program Files\Clash Verge\verge-mihomo.exe"
         OpenWireGuardGui     = $true
         OpenPingWindows      = $true
+        Deployment           = @{
+            VerifyBinaries         = $true
+            RunPreflightChecks     = $true
+            InstallWireGuardTunnel = $false
+            ReplaceExistingTunnel  = $false
+            TunnelConfigName       = "v1"
+            InstallWatchdogTask    = $true
+            ReplaceWatchdogTask    = $true
+            StartWatchdogAfterInstall = $true
+            WatchdogTaskName       = "TradeNet-Watchdog"
+            WatchdogStartupDelaySeconds = 20
+            WatchdogRestartIntervalMinutes = 1
+            WatchdogRestartCount   = 999
+            IgnoreManualStopOnBoot = $true
+        }
     }
 
     SplitRouting = @{

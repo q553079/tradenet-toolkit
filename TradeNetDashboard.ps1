@@ -1,4 +1,4 @@
-[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
+﻿[Console]::InputEncoding = [System.Text.UTF8Encoding]::new()
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 $ErrorActionPreference = "Stop"
 
@@ -67,10 +67,11 @@ function Invoke-TradeNetUiAction {
     $script:IsBusy = $true
     $timer.Stop()
     $form.UseWaitCursor = $true
-    $btnStart.Enabled = $false
-    $btnStop.Enabled = $false
-    $btnRefresh.Enabled = $false
-    $btnBuildSplit.Enabled = $false
+    foreach ($button in @($btnStart, $btnStop, $btnRefresh, $btnBuildSplit, $btnEnableWatchdog, $btnDisableWatchdog)) {
+        if ($button) {
+            $button.Enabled = $false
+        }
+    }
     Set-ValueAppearance -Label $lblAction -Text ("执行中: {0}" -f $ActionName) -Kind "Warn"
 
     try {
@@ -86,10 +87,11 @@ function Invoke-TradeNetUiAction {
         Exit-TradeNetLock
         $script:IsBusy = $false
         $form.UseWaitCursor = $false
-        $btnStart.Enabled = $true
-        $btnStop.Enabled = $true
-        $btnRefresh.Enabled = $true
-        $btnBuildSplit.Enabled = $true
+        foreach ($button in @($btnStart, $btnStop, $btnRefresh, $btnBuildSplit, $btnEnableWatchdog, $btnDisableWatchdog)) {
+            if ($button) {
+                $button.Enabled = $true
+            }
+        }
         Refresh-TradeNetDashboard
         $timer.Start()
     }
@@ -155,6 +157,7 @@ function Handle-AutoRestart {
 function Refresh-TradeNetDashboard {
     $status = Get-TradeNetRuntimeStatus -Config $script:Config
     $splitStatus = Get-TradeNetSplitRoutingStatus -Config $script:Config
+    $watchdogStatus = Get-TradeNetWatchdogTaskStatus -Config $script:Config
     $script:LatestStatus = $status
 
     if ($status.ManualStopRequested) {
@@ -181,6 +184,7 @@ function Refresh-TradeNetDashboard {
     Set-ValueAppearance -Label $statusLabels["Transfer"] -Text ($(if ($status.TransferLine) { $status.TransferLine } else { "暂无流量信息" })) -Kind "Normal"
     Set-ValueAppearance -Label $statusLabels["Reasons"] -Text (Get-StatusReasonText -Reasons $status.Reasons) -Kind ($(if ($status.Healthy) { "Good" } else { "Warn" }))
     Set-ValueAppearance -Label $statusLabels["SplitRouting"] -Text $splitStatus.Summary -Kind ($(if ($splitStatus.ValidationPassed) { "Good" } elseif ($splitStatus.ProfileReady) { "Warn" } else { "Bad" }))
+    Set-ValueAppearance -Label $statusLabels["Watchdog"] -Text $watchdogStatus.Summary -Kind ($(if ($watchdogStatus.State -eq "Running" -or $watchdogStatus.State -eq "Ready") { "Good" } elseif ($watchdogStatus.Exists) { "Warn" } else { "Bad" }))
 
     $activeLogPath = Resolve-TradeNetActiveLogPath -Config $script:Config -FallbackPath $script:DashboardLogContext.MainLog
     Set-ValueAppearance -Label $statusLabels["LogPath"] -Text $activeLogPath -Kind "Normal"
@@ -193,6 +197,8 @@ function Refresh-TradeNetDashboard {
     $btnOpenSplitProfile.Enabled = $splitStatus.ProfileExists
     $btnOpenSplitConfig.Enabled = $splitStatus.ConfigExists
     $btnOpenSplitDocs.Enabled = Test-Path -LiteralPath $splitStatus.DocsPath
+    $btnEnableWatchdog.Enabled = -not $script:IsBusy
+    $btnDisableWatchdog.Enabled = (-not $script:IsBusy) -and $watchdogStatus.Exists
 
     if (-not $script:IsBusy) {
         Handle-AutoRestart -Status $status
@@ -288,12 +294,14 @@ $btnRefresh = New-ActionButton -Text "刷新"
 $btnOpenWireGuard = New-ActionButton -Text "打开 WireGuard"
 $btnOpenLogs = New-ActionButton -Text "日志目录"
 $btnOpenCurrentLog = New-ActionButton -Text "当前日志"
+$btnEnableWatchdog = New-ActionButton -Text "启用开机守护"
+$btnDisableWatchdog = New-ActionButton -Text "停用开机守护"
 $btnBuildSplit = New-ActionButton -Text "构建分流"
 $btnOpenSplitProfile = New-ActionButton -Text "分流Profile"
 $btnOpenSplitConfig = New-ActionButton -Text "分流YAML"
 $btnOpenSplitDocs = New-ActionButton -Text "分流说明"
 
-$buttonPanel.Controls.AddRange(@($btnStart, $btnStop, $btnRefresh, $btnOpenWireGuard, $btnOpenLogs, $btnOpenCurrentLog, $btnBuildSplit, $btnOpenSplitProfile, $btnOpenSplitConfig, $btnOpenSplitDocs))
+$buttonPanel.Controls.AddRange(@($btnStart, $btnStop, $btnRefresh, $btnOpenWireGuard, $btnOpenLogs, $btnOpenCurrentLog, $btnEnableWatchdog, $btnDisableWatchdog, $btnBuildSplit, $btnOpenSplitProfile, $btnOpenSplitConfig, $btnOpenSplitDocs))
 
 $bodyLayout = New-Object System.Windows.Forms.TableLayoutPanel
 $bodyLayout.Dock = "Fill"
@@ -313,7 +321,7 @@ $statusTable = New-Object System.Windows.Forms.TableLayoutPanel
 $statusTable.Dock = "Fill"
 $statusTable.Padding = New-Object System.Windows.Forms.Padding(12, 12, 12, 12)
 $statusTable.ColumnCount = 2
-$statusTable.RowCount = 12
+$statusTable.RowCount = 13
 $statusTable.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute, 150)))
 $statusTable.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 100)))
 $statusGroup.Controls.Add($statusTable)
@@ -354,7 +362,8 @@ Add-StatusRow -Key "Handshake" -Title "最近握手" -RowIndex 7
 Add-StatusRow -Key "Transfer" -Title "流量" -RowIndex 8
 Add-StatusRow -Key "Reasons" -Title "异常原因" -RowIndex 9
 Add-StatusRow -Key "SplitRouting" -Title "分流模式" -RowIndex 10
-Add-StatusRow -Key "LogPath" -Title "当前日志" -RowIndex 11
+Add-StatusRow -Key "Watchdog" -Title "开机守护" -RowIndex 11
+Add-StatusRow -Key "LogPath" -Title "当前日志" -RowIndex 12
 
 $opsGroup = New-Object System.Windows.Forms.GroupBox
 $opsGroup.Text = "说明"
@@ -373,9 +382,10 @@ $opsText.Text = @"
 1. “启动”会清除手动停止保护，并重新拉起 udp2raw + WireGuard 服务。
 2. “停止”会中断当前通道，并写入手动停止保护，防止自动重启立刻把它拉起。
 3. 自动重启只有在连续多次检测到异常后才会触发，并带冷却时间，避免抖动时频繁重启。
-4. “构建分流”会基于 TradeNet.SplitRouting.psd1 生成并校验 Mihomo YAML，但不会立即切换当前流量。
-5. 分流模式切换前，不要让当前全局 WireGuard 服务和 Mihomo TUN 同时接管业务流量。
-6. 仪表盘关闭后不会自动执行恢复；如果你需要后台守护，可以继续使用控制台版 Monitor。
+4. “启用开机守护”会注册系统级计划任务，开机自动拉起后台 Agent；关掉仪表盘不会影响它。
+5. 手动点击“停止”后，后台守护会尊重手动停止保护，不会立刻反拉；下次开机时可按配置重新拉起。
+6. “构建分流”会基于 TradeNet.SplitRouting.psd1 生成并校验 Mihomo YAML，但不会立即切换当前流量。
+7. 分流模式切换前，不要让当前全局 WireGuard 服务和 Mihomo TUN 同时接管业务流量。
 "@
 $opsGroup.Controls.Add($opsText)
 
@@ -450,6 +460,31 @@ $btnOpenLogs.Add_Click({
 $btnOpenCurrentLog.Add_Click({
     $activeLogPath = Resolve-TradeNetActiveLogPath -Config $script:Config -FallbackPath $script:DashboardLogContext.MainLog
     Open-TradeNetFile -Path $activeLogPath
+})
+
+$btnEnableWatchdog.Add_Click({
+    Invoke-TradeNetUiAction -ActionName "启用开机守护" -Action {
+        $status = Register-TradeNetWatchdogTask -Config $script:Config -Replace -StartNow
+        Write-TradeNetLog -Message ("开机守护已启用: {0}" -f $status.Summary) -Path $script:DashboardLogContext.MainLog
+    }
+})
+
+$btnDisableWatchdog.Add_Click({
+    $result = [System.Windows.Forms.MessageBox]::Show(
+        "停用开机守护不会立即停止当前通道，但下次开机将不再自动拉起。确认继续？",
+        "TradeNet",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning
+    )
+
+    if ($result -ne [System.Windows.Forms.DialogResult]::Yes) {
+        return
+    }
+
+    Invoke-TradeNetUiAction -ActionName "停用开机守护" -Action {
+        Unregister-TradeNetWatchdogTask -Config $script:Config
+        Write-TradeNetLog -Message "开机守护已移除。" -Path $script:DashboardLogContext.MainLog -Level "WARN"
+    }
 })
 
 $btnBuildSplit.Add_Click({

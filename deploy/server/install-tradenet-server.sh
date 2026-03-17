@@ -10,6 +10,17 @@ require_root() {
   fi
 }
 
+log() {
+  printf '[TradeNet] %s\n' "$*"
+}
+
+to_bool() {
+  case "${1:-false}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 require_value() {
   local name="$1"
   local value="$2"
@@ -22,7 +33,12 @@ require_value() {
 install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     apt-get update
-    apt-get install -y wireguard iproute2 iptables curl ca-certificates
+    apt-get install -y wireguard iproute2 iptables curl ca-certificates jq ufw
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y wireguard-tools iproute iptables curl ca-certificates firewalld jq
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y epel-release || true
+    yum install -y wireguard-tools iproute iptables curl ca-certificates firewalld jq
   else
     echo "Unsupported package manager. Install wireguard, iptables, curl manually." >&2
     exit 1
@@ -45,6 +61,146 @@ generate_key_if_missing() {
     umask 077
     wg genkey > "${path}"
   fi
+}
+
+detect_firewall_backend() {
+  if [[ "${FIREWALL_BACKEND}" != "auto" ]]; then
+    printf '%s' "${FIREWALL_BACKEND}"
+    return
+  fi
+
+  if command -v ufw >/dev/null 2>&1; then
+    printf 'ufw'
+    return
+  fi
+
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    printf 'firewalld'
+    return
+  fi
+
+  printf 'iptables'
+}
+
+apply_sysctl_profile() {
+  if ! to_bool "${MANAGE_SYSCTL}"; then
+    return
+  fi
+
+  cat > /etc/sysctl.d/99-tradenet.conf <<EOF
+net.ipv4.ip_forward = 1
+EOF
+
+  if to_bool "${APPLY_GATEWAY_TUNING}"; then
+    cat >> /etc/sysctl.d/99-tradenet.conf <<EOF
+net.core.rmem_max = 67108864
+net.core.wmem_max = 67108864
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
+net.ipv4.udp_rmem_min = 16384
+net.ipv4.udp_wmem_min = 16384
+net.core.netdev_max_backlog = 4096
+net.ipv4.conf.all.rp_filter = 0
+net.ipv4.conf.default.rp_filter = 0
+EOF
+  fi
+
+  sysctl --system >/dev/null
+}
+
+configure_firewall() {
+  if ! to_bool "${MANAGE_FIREWALL}"; then
+    return
+  fi
+
+  local backend
+  backend="$(detect_firewall_backend)"
+  log "Configuring firewall via ${backend}"
+
+  case "${backend}" in
+    ufw)
+      if to_bool "${RESET_FIREWALL}"; then
+        yes | ufw reset >/dev/null
+      fi
+      ufw allow "${SSH_PORT}/tcp" >/dev/null
+      if [[ "${UDP2RAW_MODE}" == "faketcp" ]]; then
+        ufw allow "${UDP2RAW_LISTEN_PORT}/tcp" >/dev/null
+      else
+        ufw allow "${UDP2RAW_LISTEN_PORT}/udp" >/dev/null
+      fi
+      yes | ufw enable >/dev/null
+      ;;
+    firewalld)
+      systemctl enable --now firewalld >/dev/null
+      if to_bool "${RESET_FIREWALL}"; then
+        firewall-cmd --complete-reload >/dev/null
+      fi
+      firewall-cmd --permanent --add-port="${SSH_PORT}/tcp" >/dev/null
+      if [[ "${UDP2RAW_MODE}" == "faketcp" ]]; then
+        firewall-cmd --permanent --add-port="${UDP2RAW_LISTEN_PORT}/tcp" >/dev/null
+      else
+        firewall-cmd --permanent --add-port="${UDP2RAW_LISTEN_PORT}/udp" >/dev/null
+      fi
+      firewall-cmd --reload >/dev/null
+      ;;
+    iptables)
+      if ! iptables -C INPUT -p tcp --dport "${SSH_PORT}" -j ACCEPT >/dev/null 2>&1; then
+        iptables -I INPUT -p tcp --dport "${SSH_PORT}" -j ACCEPT
+      fi
+      if [[ "${UDP2RAW_MODE}" == "faketcp" ]]; then
+        if ! iptables -C INPUT -p tcp --dport "${UDP2RAW_LISTEN_PORT}" -j ACCEPT >/dev/null 2>&1; then
+          iptables -I INPUT -p tcp --dport "${UDP2RAW_LISTEN_PORT}" -j ACCEPT
+        fi
+      else
+        if ! iptables -C INPUT -p udp --dport "${UDP2RAW_LISTEN_PORT}" -j ACCEPT >/dev/null 2>&1; then
+          iptables -I INPUT -p udp --dport "${UDP2RAW_LISTEN_PORT}" -j ACCEPT
+        fi
+      fi
+      ;;
+    none)
+      ;;
+    *)
+      echo "Unsupported firewall backend: ${backend}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+write_health_report() {
+  cat > "${ARTIFACT_DIR}/server-health.txt" <<EOF
+TradeNet server health snapshot
+Generated at: $(date -Is)
+
+== systemctl ==
+$(systemctl is-active "wg-quick@${WG_IFACE}.service" 2>/dev/null || true)
+$(systemctl is-active udp2raw.service 2>/dev/null || true)
+
+== listeners ==
+$(ss -lntup 2>/dev/null || true)
+
+== wg ==
+$(wg show "${WG_IFACE}" 2>/dev/null || true)
+
+== routes ==
+$(ip route 2>/dev/null || true)
+EOF
+}
+
+verify_install() {
+  if ! to_bool "${VERIFY_AFTER_INSTALL}"; then
+    return
+  fi
+
+  systemctl is-active --quiet "wg-quick@${WG_IFACE}.service"
+  systemctl is-active --quiet udp2raw.service
+
+  if [[ "${UDP2RAW_MODE}" == "faketcp" ]]; then
+    ss -lnt | grep -q ":${UDP2RAW_LISTEN_PORT} "
+  else
+    ss -lnu | grep -q ":${UDP2RAW_LISTEN_PORT} "
+  fi
+
+  ss -lnu | grep -q ":${WG_LISTEN_PORT} "
 }
 
 json_array_from_csv() {
@@ -92,6 +248,13 @@ UDP2RAW_MODE="${TRADENET_UDP2RAW_MODE:-faketcp}"
 STATE_ROOT="${TRADENET_STATE_ROOT:-/opt/tradenet}"
 ARTIFACT_DIR="${STATE_ROOT}/artifacts"
 WG_DIR="/etc/wireguard"
+MANAGE_FIREWALL="${TRADENET_MANAGE_FIREWALL:-true}"
+FIREWALL_BACKEND="${TRADENET_FIREWALL_BACKEND:-auto}"
+RESET_FIREWALL="${TRADENET_RESET_FIREWALL:-false}"
+SSH_PORT="${TRADENET_SSH_PORT:-22}"
+MANAGE_SYSCTL="${TRADENET_MANAGE_SYSCTL:-true}"
+APPLY_GATEWAY_TUNING="${TRADENET_APPLY_GATEWAY_TUNING:-true}"
+VERIFY_AFTER_INSTALL="${TRADENET_VERIFY_AFTER_INSTALL:-true}"
 
 require_value "TRADENET_PUBLIC_ENDPOINT" "${PUBLIC_ENDPOINT}"
 require_value "TRADENET_UDP2RAW_PASSWORD" "${UDP2RAW_PASSWORD}"
@@ -156,10 +319,8 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
-cat > /etc/sysctl.d/99-tradenet.conf <<EOF
-net.ipv4.ip_forward = 1
-EOF
-sysctl --system >/dev/null
+apply_sysctl_profile
+configure_firewall
 
 systemctl daemon-reload
 systemctl enable --now "wg-quick@${WG_IFACE}.service"
@@ -217,10 +378,14 @@ Server public endpoint: ${PUBLIC_ENDPOINT}
 WireGuard interface: ${WG_IFACE}
 WireGuard address: ${SERVER_ADDRESS}
 udp2raw listen port: ${UDP2RAW_LISTEN_PORT}
+Firewall management: ${MANAGE_FIREWALL} (${FIREWALL_BACKEND})
 Artifacts:
   ${ARTIFACT_DIR}/client-wireguard.conf
   ${ARTIFACT_DIR}/tradenet-client-artifact.json
+  ${ARTIFACT_DIR}/server-health.txt
 EOF
 
+verify_install
+write_health_report
 wg show "${WG_IFACE}" || true
 echo "TradeNet server setup completed."

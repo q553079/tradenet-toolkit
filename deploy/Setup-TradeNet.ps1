@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ProfilePath = (Join-Path (Split-Path $PSScriptRoot -Parent) "TradeNet.Deployment.psd1"),
     [switch]$SkipServer,
     [switch]$SkipClient

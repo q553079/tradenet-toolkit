@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ProfilePath = (Join-Path $PSScriptRoot "TradeNet.SplitRouting.psd1"),
     [string]$ExamplePath = (Join-Path $PSScriptRoot "TradeNet.SplitRouting.example.psd1"),
     [string]$OutputPath

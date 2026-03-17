@@ -15,6 +15,9 @@ It is designed for:
 
 - `TradeNetDashboard.ps1`: Windows dashboard for start/stop/monitor/logs
 - `TradeNetMonitor.ps1`: console watchdog
+- `TradeNetAgent.ps1`: headless watchdog for scheduled-task autostart
+- `Register-TradeNetWatchdog.ps1`: registers the Windows boot watchdog task
+- `Unregister-TradeNetWatchdog.ps1`: removes the Windows boot watchdog task
 - `Build-TradeNetMihomoConfig.ps1`: renders and validates Mihomo split-routing YAML
 - `deploy/server/install-tradenet-server.sh`: Linux VPS installer
 - `deploy/Deploy-TradeNetServer.ps1`: uploads and runs the VPS installer over SSH
@@ -56,8 +59,9 @@ The VPS installer will:
 - generate server/client WireGuard keys if not provided
 - write `/etc/wireguard/wg0.conf`
 - write `/etc/systemd/system/udp2raw.service`
+- optionally manage firewall rules and sysctl tuning in a strong-intervention mode
 - enable `wg-quick@wg0` and `udp2raw`
-- export reusable client artifacts under `/opt/tradenet/artifacts`
+- verify listeners and export reusable client artifacts under `/opt/tradenet/artifacts`
 
 ### Client
 
@@ -66,6 +70,9 @@ The Windows client installer will:
 - generate `TradeNet.Config.psd1`
 - generate `TradeNet.SplitRouting.psd1`
 - write a reusable WireGuard import file to `artifacts\client-wireguard.conf`
+- run preflight checks for local binaries
+- optionally install or replace the local WireGuard tunnel service when explicitly enabled
+- optionally install a SYSTEM-level watchdog scheduled task for boot autostart and crash recovery
 - validate `mihomo\tradenet-split.yaml`
 
 ## Repository safety
@@ -78,6 +85,29 @@ Real secrets are intentionally excluded from git:
 - `logs/`, `state/`, `mihomo/`, `artifacts/`
 
 Only example profiles and templates are committed.
+
+## Strong-intervention deployment
+
+The deployment profile includes explicit strong-intervention toggles for both the
+server and the client.
+
+Server-side deployment can:
+
+- install missing packages
+- manage firewall rules
+- apply sysctl gateway tuning
+- verify service and listener health after installation
+
+Client-side deployment can:
+
+- verify required binaries before rendering config
+- generate a preflight report
+- optionally install or replace the local WireGuard tunnel service
+- optionally register a system-level watchdog task that auto-starts on boot
+- keep the tunnel alive even after the dashboard window is closed
+
+These actions are intentionally controlled by profile flags so you can choose
+between a conservative render-only workflow and a more aggressive setup flow.
 
 ## Additional scripts
 
