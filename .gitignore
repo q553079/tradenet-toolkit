@@ -1,0 +1,14 @@
+logs/
+state/
+mihomo/
+artifacts/
+__pycache__/
+*.pyc
+
+TradeNet.Config.psd1
+TradeNet.SplitRouting.psd1
+TradeNet.Deployment.psd1
+
+*.bak_*
+*.tmp
+*.orig
