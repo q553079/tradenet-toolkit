@@ -421,6 +421,147 @@ function Get-TradeNetTailText {
     return (Get-Content -Path $Path -Tail $LineCount -ErrorAction SilentlyContinue | Out-String).Trim()
 }
 
+function Convert-TradeNetLogInlineText {
+    param([string]$Text)
+
+    if (-not $Text) {
+        return ""
+    }
+
+    $lines = @(
+        $Text -split "`r?`n" | Where-Object {
+            $_ -and $_.Trim().Length -gt 0
+        } | ForEach-Object {
+            $_.Trim()
+        }
+    )
+
+    return ($lines -join " | ")
+}
+
+function Get-TradeNetRouteSummary {
+    param([pscustomobject]$Config)
+
+    $targetPrefixes = @(
+        "0.0.0.0/0",
+        "0.0.0.0/1",
+        "128.0.0.0/1",
+        ("{0}/32" -f $Config.VpsIp)
+    )
+
+    $routes = @(
+        Get-NetRoute -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
+            $targetPrefixes -contains $_.DestinationPrefix -or $_.InterfaceAlias -in @("Meta", "v1")
+        }
+    )
+
+    if (-not $routes) {
+        return "未发现关键路由。"
+    }
+
+    $parts = @(
+        $routes |
+            Sort-Object DestinationPrefix, RouteMetric, InterfaceAlias |
+            ForEach-Object {
+                $nextHop = if ($_.NextHop) { $_.NextHop } else { "0.0.0.0" }
+                $iface = if ($_.InterfaceAlias) { $_.InterfaceAlias } else { "N/A" }
+                "{0}->{1} via {2} metric={3}" -f $_.DestinationPrefix, $nextHop, $iface, $_.RouteMetric
+            }
+    )
+
+    return ($parts -join " ; ")
+}
+
+function Get-TradeNetListenerSummary {
+    param([pscustomobject]$Config)
+
+    $items = [System.Collections.Generic.List[string]]::new()
+
+    $udpMatches = @(
+        Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object {
+            $_.LocalPort -eq $Config.Udp2rawListenPort -and
+            ($_.LocalAddress -eq $Config.Udp2rawListenHost -or $_.LocalAddress -eq "0.0.0.0")
+        }
+    )
+    foreach ($match in $udpMatches) {
+        $items.Add(("UDP {0}:{1} pid={2}" -f $match.LocalAddress, $match.LocalPort, $match.OwningProcess))
+    }
+
+    $tcpMatches = @(
+        Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {
+            $_.LocalPort -eq $Config.Udp2rawListenPort -and
+            ($_.LocalAddress -eq $Config.Udp2rawListenHost -or $_.LocalAddress -eq "0.0.0.0")
+        }
+    )
+    foreach ($match in $tcpMatches) {
+        $items.Add(("TCP {0}:{1} pid={2}" -f $match.LocalAddress, $match.LocalPort, $match.OwningProcess))
+    }
+
+    if ($items.Count -eq 0) {
+        return ("未发现监听 {0}" -f $Config.Udp2rawListen)
+    }
+
+    return ($items.ToArray() -join " ; ")
+}
+
+function Write-TradeNetDiagnostics {
+    param(
+        [pscustomobject]$Config,
+        [string]$LogPath,
+        [string]$Reason = "snapshot",
+        [string]$Udp2rawOutLog,
+        [string]$Udp2rawErrLog
+    )
+
+    $udpProcesses = @(Get-TradeNetProcessByPath -ExecutablePath $Config.Udp2rawExe)
+    $udpProcessText = if ($udpProcesses) {
+        @(
+            $udpProcesses | ForEach-Object {
+                "PID={0}" -f $_.ProcessId
+            }
+        ) -join ", "
+    } else {
+        "未运行"
+    }
+
+    $wgStatus = Get-TradeNetWgStatus -Config $Config
+    $splitStatus = Get-TradeNetSplitRoutingStatus -Config $Config
+    $routeSummary = Get-TradeNetRouteSummary -Config $Config
+    $listenerSummary = Get-TradeNetListenerSummary -Config $Config
+
+    if (-not $Udp2rawOutLog -or -not $Udp2rawErrLog) {
+        $state = Load-TradeNetState -Config $Config
+        if ($state) {
+            if (-not $Udp2rawOutLog) {
+                $Udp2rawOutLog = $state.Udp2rawOutLog
+            }
+            if (-not $Udp2rawErrLog) {
+                $Udp2rawErrLog = $state.Udp2rawErrLog
+            }
+        }
+    }
+
+    Write-TradeNetLog -Message ("诊断快照[{0}] udp2raw: exe={1}; listen={2}; remote={3}; dev={4}; pids={5}" -f $Reason, $Config.Udp2rawExe, $Config.Udp2rawListen, $Config.Udp2rawRemote, $Config.Udp2rawDev, $udpProcessText) -Path $LogPath -NoConsole
+    Write-TradeNetLog -Message ("诊断快照[{0}] 路由: {1}" -f $Reason, $routeSummary) -Path $LogPath -NoConsole
+    Write-TradeNetLog -Message ("诊断快照[{0}] 监听: {1}" -f $Reason, $listenerSummary) -Path $LogPath -NoConsole
+    Write-TradeNetLog -Message ("诊断快照[{0}] WireGuard: service={1}; cli={2}; handshake={3}; transfer={4}" -f $Reason, $wgStatus.ServiceState, $wgStatus.CliState, $(if ($wgStatus.HandshakeLine) { $wgStatus.HandshakeLine.Trim() } else { "无" }), $(if ($wgStatus.TransferLine) { $wgStatus.TransferLine.Trim() } else { "无" })) -Path $LogPath -NoConsole
+    Write-TradeNetLog -Message ("诊断快照[{0}] SplitRouting: {1}; validation={2}" -f $Reason, $splitStatus.Summary, (Convert-TradeNetLogInlineText -Text $splitStatus.ValidationMessage)) -Path $LogPath -NoConsole
+
+    if ($wgStatus.RawText) {
+        Write-TradeNetLog -Message ("诊断快照[{0}] wg.exe raw: {1}" -f $Reason, (Convert-TradeNetLogInlineText -Text $wgStatus.RawText)) -Path $LogPath -NoConsole
+    }
+
+    $udpOutTail = Get-TradeNetTailText -Path $Udp2rawOutLog -LineCount 10
+    if ($udpOutTail) {
+        Write-TradeNetLog -Message ("诊断快照[{0}] udp2raw stdout tail: {1}" -f $Reason, (Convert-TradeNetLogInlineText -Text $udpOutTail)) -Path $LogPath -NoConsole
+    }
+
+    $udpErrTail = Get-TradeNetTailText -Path $Udp2rawErrLog -LineCount 10
+    if ($udpErrTail) {
+        Write-TradeNetLog -Message ("诊断快照[{0}] udp2raw stderr tail: {1}" -f $Reason, (Convert-TradeNetLogInlineText -Text $udpErrTail)) -Path $LogPath -NoConsole
+    }
+}
+
 function Ensure-TradeNetHostRoute {
     param(
         [pscustomobject]$Config,
@@ -812,11 +953,11 @@ function Start-TradeNetStack {
     Ensure-TradeNetHostRoute -Config $Config -LogPath $LogContext.MainLog
 
     $udpProcess = Start-TradeNetUdp2raw -Config $Config -LogContext $LogContext
-    Restart-TradeNetWireGuardService -Config $Config -LogPath $LogContext.MainLog
+    # Restart-TradeNetWireGuardService -Config $Config -LogPath $LogContext.MainLog
 
-    if ($OpenWireGuardGui) {
-        Ensure-TradeNetWireGuardGui -Config $Config -LogPath $LogContext.MainLog
-    }
+    # if ($OpenWireGuardGui) {
+    #     Ensure-TradeNetWireGuardGui -Config $Config -LogPath $LogContext.MainLog
+    # }
 
     if ($OpenPingWindows) {
         Ensure-TradeNetPingWindows -Config $Config -LogPath $LogContext.MainLog
@@ -828,6 +969,8 @@ function Start-TradeNetStack {
     } else {
         Write-TradeNetLog -Message "WireGuard 已启动，但尚未检测到握手。" -Path $LogContext.MainLog -Level "WARN"
     }
+
+    Write-TradeNetDiagnostics -Config $Config -LogPath $LogContext.MainLog -Reason "start" -Udp2rawOutLog $LogContext.Udp2rawOutLog -Udp2rawErrLog $LogContext.Udp2rawErrLog
 
     Save-TradeNetState -Config $Config -State @{
         StartedAt      = (Get-Date).ToString("o")
@@ -855,6 +998,7 @@ function Stop-TradeNetStack {
     Assert-TradeNetAdministrator
     Write-TradeNetLog -Message "==== Stop TradeNet ====" -Path $LogPath
     Set-TradeNetManualStopFlag -Config $Config
+    Write-TradeNetDiagnostics -Config $Config -LogPath $LogPath -Reason "stop"
 
     $service = Get-Service -Name $Config.WireGuardServiceName -ErrorAction SilentlyContinue
     if ($service -and $service.Status -ne "Stopped") {

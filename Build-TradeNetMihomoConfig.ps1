@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$ProfilePath = (Join-Path $PSScriptRoot "TradeNet.SplitRouting.psd1"),
     [string]$ExamplePath = (Join-Path $PSScriptRoot "TradeNet.SplitRouting.example.psd1"),
     [string]$OutputPath
@@ -42,10 +42,91 @@ function Add-YamlList {
     }
 }
 
+function Add-YamlListIfAny {
+    param(
+        [System.Collections.Generic.List[string]]$Lines,
+        [string]$Key,
+        [object[]]$Values,
+        [int]$Indent = 0
+    )
+
+    $normalizedValues = @(Get-NormalizedArray -Value $Values)
+    if ($normalizedValues.Count -gt 0) {
+        Add-YamlList -Lines $Lines -Key $Key -Values $normalizedValues -Indent $Indent
+    }
+}
+
 function Test-PlaceholderValue {
     param([string]$Value)
 
     return $Value -like "__FILL_*__"
+}
+
+function Get-ConfigValue {
+    param(
+        [object]$Map,
+        [string]$Key,
+        [object]$Default = $null
+    )
+
+    if ($null -eq $Map) {
+        return $Default
+    }
+
+    if ($Map -is [System.Collections.IDictionary]) {
+        if ($Map.Contains($Key)) {
+            return $Map[$Key]
+        }
+
+        return $Default
+    }
+
+    $property = $Map.PSObject.Properties[$Key]
+    if ($null -ne $property) {
+        return $property.Value
+    }
+
+    return $Default
+}
+
+function Get-NormalizedArray {
+    param([object]$Value)
+
+    if ($null -eq $Value) {
+        return @()
+    }
+
+    return @(
+        @($Value) | Where-Object {
+            $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_)
+        }
+    )
+}
+
+function Get-RuleCount {
+    param([object]$Value)
+
+    if ($null -eq $Value) {
+        return 0
+    }
+
+    return @($Value).Count
+}
+
+function Get-BooleanLiteral {
+    param([bool]$Value)
+
+    return $(if ($Value) { "true" } else { "false" })
+}
+
+function Get-WireGuardPrimaryIp {
+    param([string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $Value
+    }
+
+    return ($Value -split "/", 2)[0]
 }
 
 if (-not (Test-Path -LiteralPath $ProfilePath)) {
@@ -86,23 +167,77 @@ Add-YamlKeyValue -Lines $lines -Key "mixed-port" -Value ([string]$profile.MixedP
 Add-YamlKeyValue -Lines $lines -Key "allow-lan" -Value "false"
 Add-YamlKeyValue -Lines $lines -Key "mode" -Value "rule"
 Add-YamlKeyValue -Lines $lines -Key "log-level" -Value (Quote-YamlString -Value $profile.LogLevel)
-Add-YamlKeyValue -Lines $lines -Key "ipv6" -Value ($(if ($profile.DNS.IPv6) { "true" } else { "false" }))
+Add-YamlKeyValue -Lines $lines -Key "ipv6" -Value (Get-BooleanLiteral -Value ([bool]$profile.DNS.IPv6))
 Add-YamlKeyValue -Lines $lines -Key "external-controller" -Value (Quote-YamlString -Value $profile.Controller)
 $lines.Add("")
 
+$dnsDefaultNameServers = Get-NormalizedArray -Value (Get-ConfigValue -Map $profile.DNS -Key "DefaultNameServers")
+$dnsNameServers = Get-NormalizedArray -Value (Get-ConfigValue -Map $profile.DNS -Key "NameServers")
+$dnsFallbackNameServers = Get-NormalizedArray -Value (Get-ConfigValue -Map $profile.DNS -Key "FallbackNameServers")
+$dnsProxyServerNameServers = Get-NormalizedArray -Value (Get-ConfigValue -Map $profile.DNS -Key "ProxyServerNameServers")
+$dnsDirectNameServers = Get-NormalizedArray -Value (Get-ConfigValue -Map $profile.DNS -Key "DirectNameServers")
+$dnsDirectNameServersFollowPolicy = Get-ConfigValue -Map $profile.DNS -Key "DirectNameServersFollowPolicy"
+$dnsFallbackFilter = Get-ConfigValue -Map $profile.DNS -Key "FallbackFilter"
+$snifferConfig = Get-ConfigValue -Map $profile -Key "Sniffer"
+$wireGuardDnsServers = Get-NormalizedArray -Value (Get-ConfigValue -Map $profile.WireGuard -Key "Dns")
+
 $lines.Add("dns:")
-Add-YamlKeyValue -Lines $lines -Key "enable" -Value ($(if ($profile.DNS.Enable) { "true" } else { "false" })) -Indent 2
-Add-YamlKeyValue -Lines $lines -Key "ipv6" -Value ($(if ($profile.DNS.IPv6) { "true" } else { "false" })) -Indent 2
+Add-YamlKeyValue -Lines $lines -Key "enable" -Value (Get-BooleanLiteral -Value ([bool]$profile.DNS.Enable)) -Indent 2
+Add-YamlKeyValue -Lines $lines -Key "ipv6" -Value (Get-BooleanLiteral -Value ([bool]$profile.DNS.IPv6)) -Indent 2
 Add-YamlKeyValue -Lines $lines -Key "enhanced-mode" -Value (Quote-YamlString -Value $profile.DNS.EnhancedMode) -Indent 2
-Add-YamlList -Lines $lines -Key "nameserver" -Values $profile.DNS.NameServers -Indent 2
+Add-YamlListIfAny -Lines $lines -Key "default-nameserver" -Values $dnsDefaultNameServers -Indent 2
+Add-YamlListIfAny -Lines $lines -Key "nameserver" -Values $dnsNameServers -Indent 2
+Add-YamlListIfAny -Lines $lines -Key "fallback" -Values $dnsFallbackNameServers -Indent 2
+Add-YamlListIfAny -Lines $lines -Key "proxy-server-nameserver" -Values $dnsProxyServerNameServers -Indent 2
+Add-YamlListIfAny -Lines $lines -Key "direct-nameserver" -Values $dnsDirectNameServers -Indent 2
+if ($null -ne $dnsDirectNameServersFollowPolicy) {
+    Add-YamlKeyValue -Lines $lines -Key "direct-nameserver-follow-policy" -Value (Get-BooleanLiteral -Value ([bool]$dnsDirectNameServersFollowPolicy)) -Indent 2
+}
+if ($null -ne $dnsFallbackFilter) {
+    $lines.Add("  fallback-filter:")
+
+    $dnsFallbackGeoIp = Get-ConfigValue -Map $dnsFallbackFilter -Key "GeoIp"
+    if ($null -ne $dnsFallbackGeoIp) {
+        Add-YamlKeyValue -Lines $lines -Key "geoip" -Value (Get-BooleanLiteral -Value ([bool]$dnsFallbackGeoIp)) -Indent 4
+    }
+
+    $dnsFallbackGeoIpCode = Get-ConfigValue -Map $dnsFallbackFilter -Key "GeoIpCode"
+    if (-not [string]::IsNullOrWhiteSpace([string]$dnsFallbackGeoIpCode)) {
+        Add-YamlKeyValue -Lines $lines -Key "geoip-code" -Value (Quote-YamlString -Value ([string]$dnsFallbackGeoIpCode)) -Indent 4
+    }
+
+    Add-YamlListIfAny -Lines $lines -Key "geosite" -Values (Get-ConfigValue -Map $dnsFallbackFilter -Key "GeoSite") -Indent 4
+    Add-YamlListIfAny -Lines $lines -Key "ipcidr" -Values (Get-ConfigValue -Map $dnsFallbackFilter -Key "IpCidr") -Indent 4
+    Add-YamlListIfAny -Lines $lines -Key "domain" -Values (Get-ConfigValue -Map $dnsFallbackFilter -Key "Domain") -Indent 4
+}
+$lines.Add("")
+
+if ($null -ne $snifferConfig) {
+    $lines.Add("sniffer:")
+    Add-YamlKeyValue -Lines $lines -Key "enable" -Value (Get-BooleanLiteral -Value ([bool](Get-ConfigValue -Map $snifferConfig -Key "Enable"))) -Indent 2
+    Add-YamlKeyValue -Lines $lines -Key "force-dns-mapping" -Value (Get-BooleanLiteral -Value ([bool](Get-ConfigValue -Map $snifferConfig -Key "ForceDnsMapping"))) -Indent 2
+    Add-YamlKeyValue -Lines $lines -Key "parse-pure-ip" -Value (Get-BooleanLiteral -Value ([bool](Get-ConfigValue -Map $snifferConfig -Key "ParsePureIp"))) -Indent 2
+    Add-YamlKeyValue -Lines $lines -Key "override-destination" -Value (Get-BooleanLiteral -Value ([bool](Get-ConfigValue -Map $snifferConfig -Key "OverrideDestination"))) -Indent 2
+    $lines.Add("  sniff:")
+    $lines.Add("    HTTP:")
+    Add-YamlListIfAny -Lines $lines -Key "ports" -Values (Get-ConfigValue -Map $snifferConfig -Key "HttpPorts") -Indent 6
+    $lines.Add("    TLS:")
+    Add-YamlListIfAny -Lines $lines -Key "ports" -Values (Get-ConfigValue -Map $snifferConfig -Key "TlsPorts") -Indent 6
+    $lines.Add("    QUIC:")
+    Add-YamlListIfAny -Lines $lines -Key "ports" -Values (Get-ConfigValue -Map $snifferConfig -Key "QuicPorts") -Indent 6
+    Add-YamlListIfAny -Lines $lines -Key "force-domain" -Values (Get-ConfigValue -Map $snifferConfig -Key "ForceDomain") -Indent 2
+    Add-YamlListIfAny -Lines $lines -Key "skip-domain" -Values (Get-ConfigValue -Map $snifferConfig -Key "SkipDomain") -Indent 2
+    $lines.Add("")
+}
+
 $lines.Add("")
 
 $lines.Add("tun:")
-Add-YamlKeyValue -Lines $lines -Key "enable" -Value ($(if ($profile.TUN.Enable) { "true" } else { "false" })) -Indent 2
+Add-YamlKeyValue -Lines $lines -Key "enable" -Value (Get-BooleanLiteral -Value ([bool]$profile.TUN.Enable)) -Indent 2
 Add-YamlKeyValue -Lines $lines -Key "stack" -Value (Quote-YamlString -Value $profile.TUN.Stack) -Indent 2
-Add-YamlKeyValue -Lines $lines -Key "auto-route" -Value ($(if ($profile.TUN.AutoRoute) { "true" } else { "false" })) -Indent 2
-Add-YamlKeyValue -Lines $lines -Key "strict-route" -Value ($(if ($profile.TUN.StrictRoute) { "true" } else { "false" })) -Indent 2
-Add-YamlList -Lines $lines -Key "dns-hijack" -Values $profile.TUN.DnsHijack -Indent 2
+Add-YamlKeyValue -Lines $lines -Key "auto-route" -Value (Get-BooleanLiteral -Value ([bool]$profile.TUN.AutoRoute)) -Indent 2
+Add-YamlKeyValue -Lines $lines -Key "strict-route" -Value (Get-BooleanLiteral -Value ([bool]$profile.TUN.StrictRoute)) -Indent 2
+Add-YamlListIfAny -Lines $lines -Key "dns-hijack" -Values $profile.TUN.DnsHijack -Indent 2
 $lines.Add("")
 
 $lines.Add("proxies:")
@@ -110,13 +245,17 @@ $lines.Add(("  - name: {0}" -f (Quote-YamlString -Value $profile.WireGuard.Name)
 Add-YamlKeyValue -Lines $lines -Key "type" -Value (Quote-YamlString -Value "wireguard") -Indent 4
 Add-YamlKeyValue -Lines $lines -Key "server" -Value (Quote-YamlString -Value $profile.WireGuard.Server) -Indent 4
 Add-YamlKeyValue -Lines $lines -Key "port" -Value ([string]$profile.WireGuard.Port) -Indent 4
-Add-YamlKeyValue -Lines $lines -Key "ip" -Value (Quote-YamlString -Value $profile.WireGuard.IpCidr) -Indent 4
+Add-YamlKeyValue -Lines $lines -Key "ip" -Value (Quote-YamlString -Value (Get-WireGuardPrimaryIp -Value ([string]$profile.WireGuard.IpCidr))) -Indent 4
 Add-YamlKeyValue -Lines $lines -Key "private-key" -Value (Quote-YamlString -Value $profile.WireGuard.PrivateKey) -Indent 4
 Add-YamlKeyValue -Lines $lines -Key "public-key" -Value (Quote-YamlString -Value $profile.WireGuard.PublicKey) -Indent 4
 Add-YamlKeyValue -Lines $lines -Key "mtu" -Value ([string]$profile.WireGuard.MTU) -Indent 4
-Add-YamlKeyValue -Lines $lines -Key "udp" -Value ($(if ($profile.WireGuard.UDP) { "true" } else { "false" })) -Indent 4
+Add-YamlKeyValue -Lines $lines -Key "udp" -Value (Get-BooleanLiteral -Value ([bool]$profile.WireGuard.UDP)) -Indent 4
 Add-YamlKeyValue -Lines $lines -Key "persistent-keepalive" -Value ([string]$profile.WireGuard.PersistentKeepalive) -Indent 4
 Add-YamlList -Lines $lines -Key "allowed-ips" -Values $profile.WireGuard.AllowedIPs -Indent 4
+if ($null -ne (Get-ConfigValue -Map $profile.WireGuard -Key "RemoteDnsResolve")) {
+    Add-YamlKeyValue -Lines $lines -Key "remote-dns-resolve" -Value (Get-BooleanLiteral -Value ([bool](Get-ConfigValue -Map $profile.WireGuard -Key "RemoteDnsResolve"))) -Indent 4
+}
+Add-YamlListIfAny -Lines $lines -Key "dns" -Values $wireGuardDnsServers -Indent 4
 $lines.Add("")
 
 $lines.Add("proxy-groups:")
@@ -128,8 +267,15 @@ $lines.Add("      - 'DIRECT'")
 $lines.Add("")
 
 $lines.Add("rules:")
+
 foreach ($name in $profile.AppRules.Direct) {
     $lines.Add(("  - PROCESS-NAME,{0},DIRECT" -f $name))
+}
+
+if ($profile.CustomRules) {
+    foreach ($rule in $profile.CustomRules) {
+        $lines.Add(("  - {0}" -f $rule))
+    }
 }
 
 foreach ($name in $profile.AppRules.TradeNet) {
@@ -144,6 +290,30 @@ Set-Content -Path $OutputPath -Value $yaml -Encoding UTF8
 $validationPassed = $false
 $validationMessage = "Mihomo validation skipped."
 $mihomoExe = $profile.MihomoExe
+$ruleSummary = [ordered]@{
+    DirectApps    = Get-RuleCount -Value $profile.AppRules.Direct
+    TradeNetApps  = Get-RuleCount -Value $profile.AppRules.TradeNet
+    CustomRules   = Get-RuleCount -Value $profile.CustomRules
+    DefaultAction = $profile.DefaultAction
+}
+$configSummary = [ordered]@{
+    DnsEnhancedMode         = $profile.DNS.EnhancedMode
+    DnsNameServers          = @($dnsNameServers)
+    DnsFallbackNameServers  = @($dnsFallbackNameServers)
+    DnsFallbackDomains      = @(Get-ConfigValue -Map $dnsFallbackFilter -Key "Domain")
+    TunEnabled              = [bool]$profile.TUN.Enable
+    TunStack                = $profile.TUN.Stack
+    TunStrictRoute          = [bool]$profile.TUN.StrictRoute
+    SnifferEnabled          = [bool](Get-ConfigValue -Map $snifferConfig -Key "Enable")
+    MixedPort               = [int]$profile.MixedPort
+    Controller              = [string]$profile.Controller
+    WireGuardEndpoint       = ("{0}:{1}" -f $profile.WireGuard.Server, $profile.WireGuard.Port)
+    WireGuardIpCidr         = [string]$profile.WireGuard.IpCidr
+    WireGuardProxyIp        = Get-WireGuardPrimaryIp -Value ([string]$profile.WireGuard.IpCidr)
+    WireGuardRemoteDns      = [bool](Get-ConfigValue -Map $profile.WireGuard -Key "RemoteDnsResolve")
+    WireGuardDns            = @($wireGuardDnsServers)
+    AllowedIPs              = @($profile.WireGuard.AllowedIPs)
+}
 
 if ($mihomoExe -and (Test-Path -LiteralPath $mihomoExe)) {
     $validationOutput = (& $mihomoExe -t -f $OutputPath 2>&1 | Out-String).Trim()
@@ -157,6 +327,8 @@ if ($mihomoExe -and (Test-Path -LiteralPath $mihomoExe)) {
             MihomoExe         = $mihomoExe
             ValidationPassed  = $validationPassed
             ValidationMessage = $validationMessage
+            RuleSummary       = $ruleSummary
+            ConfigSummary     = $configSummary
         }
         $state | ConvertTo-Json -Depth 4 | Set-Content -Path $statePath -Encoding UTF8
         throw "Mihomo validation failed: $validationMessage"
@@ -172,10 +344,24 @@ $state = [ordered]@{
     MihomoExe         = $mihomoExe
     ValidationPassed  = $validationPassed
     ValidationMessage = $validationMessage
+    RuleSummary       = $ruleSummary
+    ConfigSummary     = $configSummary
 }
 $state | ConvertTo-Json -Depth 4 | Set-Content -Path $statePath -Encoding UTF8
 
 Write-Host "Generated: $OutputPath" -ForegroundColor Green
+Write-Host ("Profile: {0}" -f $ProfilePath) -ForegroundColor Gray
+Write-Host ("WireGuard: {0} ip={1}; allowed={2}; remote-dns={3}" -f $configSummary.WireGuardEndpoint, $configSummary.WireGuardProxyIp, (@($configSummary.AllowedIPs) -join ","), $configSummary.WireGuardRemoteDns) -ForegroundColor Gray
+Write-Host ("DNS/TUN: enhanced-mode={0}; nameserver={1}; fallback={2}; sniffer={3}; tun={4}; stack={5}; strict-route={6}" -f $configSummary.DnsEnhancedMode, @($configSummary.DnsNameServers).Count, @($configSummary.DnsFallbackNameServers).Count, $configSummary.SnifferEnabled, $configSummary.TunEnabled, $configSummary.TunStack, $configSummary.TunStrictRoute) -ForegroundColor Gray
+Write-Host ("Rules: direct={0}; tradenet={1}; custom={2}; default={3}" -f $ruleSummary.DirectApps, $ruleSummary.TradeNetApps, $ruleSummary.CustomRules, $ruleSummary.DefaultAction) -ForegroundColor Gray
+if ($ruleSummary.CustomRules -gt 0) {
+    $preview = @($profile.CustomRules | Select-Object -First 8) -join " | "
+    Write-Host ("Custom rule preview: {0}" -f $preview) -ForegroundColor Gray
+}
+if (@($configSummary.DnsFallbackDomains).Count -gt 0) {
+    $dnsPreview = @($configSummary.DnsFallbackDomains | Select-Object -First 8) -join " | "
+    Write-Host ("DNS fallback domain preview: {0}" -f $dnsPreview) -ForegroundColor Gray
+}
 Write-Host "Validate with:" -ForegroundColor Gray
 Write-Host "  `"$($profile.MihomoExe)`" -t -f `"$OutputPath`"" -ForegroundColor Gray
 Write-Host "State: $statePath" -ForegroundColor Gray

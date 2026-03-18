@@ -48,6 +48,19 @@ powershell -ExecutionPolicy Bypass -File .\deploy\Setup-TradeNet.ps1
 Do not run `Setup-TradeNet.ps1` during active trading. It is a deployment
 workflow and may rewrite the server-side WireGuard and `udp2raw` configuration.
 
+## Chinese operation guide
+
+For the current Windows `Clash Verge / Mihomo` split-routing workflow, including:
+
+- the active split-routing design
+- how to start and stop `TradeNet`
+- how to rebuild and sync the local Clash profile
+- how to verify that ATAS / Rithmic is using `udp2raw + TradeNet-WG`
+
+see:
+
+- [doc/Clash-Verge-SplitRouting.zh-CN.md](doc/Clash-Verge-SplitRouting.zh-CN.md)
+
 ## Deployment model
 
 ### Server
