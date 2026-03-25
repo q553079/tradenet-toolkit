@@ -50,7 +50,21 @@ workflow and may rewrite the server-side WireGuard and `udp2raw` configuration.
 
 ## Chinese operation guide
 
-For the current Windows `Clash Verge / Mihomo` split-routing workflow, including:
+For the full VPS-to-Windows deployment workflow and the current
+`Clash Verge / Mihomo` split-routing workflow, including:
+
+- what must be prepared on the VPS and on Windows
+- how to fill `TradeNet.Deployment.psd1`
+- what the automated deployment does for the server and the client
+- how to do the one-time manual Clash Verge import
+- how to enable later automatic Clash profile sync
+- how to start, stop, verify, and troubleshoot the live stack
+
+see:
+
+- [doc/TradeNet-Deployment.zh-CN.md](doc/TradeNet-Deployment.zh-CN.md)
+
+For the narrower day-2 split-routing usage guide, including:
 
 - the active split-routing design
 - how to start and stop `TradeNet`

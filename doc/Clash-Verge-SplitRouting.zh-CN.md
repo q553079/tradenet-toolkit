@@ -1,5 +1,11 @@
 # TradeNet Clash Verge 分流配置与启动说明
 
+如果你现在是在给一台新机器做完整落地，先看：
+
+- [TradeNet-Deployment.zh-CN.md](D:/TradeNet/doc/TradeNet-Deployment.zh-CN.md)
+
+本文更偏向“已经部署好以后，日常怎么启动、构建、同步、验证”。
+
 ## 概述
 
 这套方案用于在 Windows 客户端上运行一条稳定的：
@@ -175,6 +181,13 @@ powershell -ExecutionPolicy Bypass -File .\Build-TradeNetMihomoConfig.ps1
 
 生成后的 `tradenet-split.yaml` 需要同步到 Clash Verge 实际导入的本地 profile 文件。
 
+现在项目已经支持两种方式：
+
+1. 第一次手动导入
+2. 导入完成后，后续通过 `Install-TradeNetClient.ps1` 自动覆盖同步
+
+也就是说，第一次让 Clash Verge 认识这个 profile，仍然建议手工操作一次；从第二次开始，就可以让自动化脚本直接覆盖这个本地 profile 文件。
+
 本机当前使用过的 profile 文件示例：
 
 - `C:\Users\666\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev\profiles\LzcYMgIeZchO.yaml`
@@ -192,6 +205,23 @@ Copy-Item `
 
 1. 重启 Mihomo service
 2. 或切到别的 profile，再切回 `TradeNet分流`
+
+如果你已经在 `TradeNet.Deployment.psd1` 里配置了：
+
+- `Client.ClashVergeProfilePath`
+- `Client.Deployment.SyncClashProfile = $true`
+
+那么重新执行下面任一命令时，脚本会在生成 YAML 后自动覆盖这个 Clash Verge profile 文件：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\Install-TradeNetClient.ps1
+```
+
+或者：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\Setup-TradeNet.ps1 -SkipServer
+```
 
 ## 日常推荐顺序
 
@@ -241,7 +271,7 @@ Get-Process -Name udp2raw_mp
 - `D:\TradeNet\mihomo\tradenet-split.yaml`
 - Clash Verge 导入后的 profile 文件
 
-不是自动同步关系。生成后必须覆盖或重新导入。
+默认不是自动同步关系。只有当你在部署配置里明确开启 `SyncClashProfile` 时，脚本才会自动覆盖目标 profile；否则仍然需要手工复制或重新导入。
 
 ### 3. 交易正常，但某些网页异常
 

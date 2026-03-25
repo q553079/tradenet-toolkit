@@ -40,6 +40,7 @@
         Udp2rawDev           = "\Device\NPF_{CHANGE_ME}"
         WireGuardServiceName = "WireGuardTunnel`$v1"
         LocalGateway         = "192.168.0.1"
+        ClashVergeProfilePath = "C:\Users\YOUR_NAME\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev\profiles\YOUR_PROFILE_ID.yaml"
         WireGuardGui         = "C:\Program Files\WireGuard\wireguard.exe"
         WgExe                = "C:\Program Files\WireGuard\wg.exe"
         MihomoExe            = "C:\Program Files\Clash Verge\verge-mihomo.exe"
@@ -54,6 +55,8 @@
             InstallWatchdogTask    = $true
             ReplaceWatchdogTask    = $true
             StartWatchdogAfterInstall = $true
+            SyncClashProfile       = $false
+            BackupClashProfileBeforeSync = $true
             WatchdogTaskName       = "TradeNet-Watchdog"
             WatchdogStartupDelaySeconds = 20
             WatchdogRestartIntervalMinutes = 1
@@ -64,10 +67,6 @@
 
     SplitRouting = @{
         DirectApps = @(
-            "chrome.exe",
-            "msedge.exe",
-            "msedgewebview2.exe",
-            "firefox.exe",
             "steam.exe",
             "steamservice.exe",
             "steamwebhelper.exe",
@@ -78,6 +77,11 @@
             "tgp_daemon.exe",
             "wegameservice.exe",
             "client_launcher.exe",
+            "LeagueClient.exe",
+            "LeagueClientUx.exe",
+            "LeagueClientUxRender.exe",
+            "League of Legends.exe",
+            "cross.exe",
             "Assistant.exe",
             "udp2raw_mp.exe",
             "verge-mihomo.exe",
@@ -89,7 +93,23 @@
             "Bookmap.exe",
             "RTraderPro.exe",
             "RTrader.exe",
-            "RithmicTraderPro.exe"
+            "RithmicTraderPro.exe",
+            "ChatGPT.exe",
+            "Codex.exe"
+        )
+        WireGuardAllowedIPs = @(
+            "0.0.0.0/0"
+        )
+        WireGuardRemoteDnsResolve = $true
+        WireGuardDns = @(
+            "1.1.1.1",
+            "8.8.8.8"
+        )
+        AdditionalRules = @(
+            # "DOMAIN-SUFFIX,example.com,TradeNet"
+        )
+        AdditionalFallbackDomains = @(
+            # "+.example.com"
         )
     }
 }

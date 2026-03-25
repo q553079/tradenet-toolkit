@@ -24,12 +24,21 @@
     AppRules = @{
         Direct = @(
             "steam.exe",
+            "steamservice.exe",
             "steamwebhelper.exe",
             "gameoverlayui.exe",
             "gameoverlayui64.exe",
             "wegame.exe",
+            "wegame_env.exe",
             "tgp_daemon.exe",
             "wegameservice.exe",
+            "client_launcher.exe",
+            "LeagueClient.exe",
+            "LeagueClientUx.exe",
+            "LeagueClientUxRender.exe",
+            "League of Legends.exe",
+            "cross.exe",
+            "Assistant.exe",
             "udp2raw_mp.exe",
             "verge-mihomo.exe",
             "clash-verge.exe"
@@ -88,6 +97,11 @@
         "GEOSITE,youtube,TradeNet",
         "DOMAIN-SUFFIX,googlevideo.com,TradeNet",
         "DOMAIN-SUFFIX,ytimg.com,TradeNet",
+        "DOMAIN-SUFFIX,tradingview.com,TradeNet",
+        "DOMAIN-SUFFIX,missav.ws,TradeNet",
+        "DOMAIN-SUFFIX,netflav.com,TradeNet",
+        "DOMAIN-SUFFIX,cmegroup.com,TradeNet",
+        "DOMAIN-SUFFIX,cboe.com,TradeNet",
         "DOMAIN-SUFFIX,gvt1.com,TradeNet",
         "DOMAIN-SUFFIX,gvt2.com,TradeNet",
         "DOMAIN-SUFFIX,googleapis.com,TradeNet"
@@ -161,6 +175,11 @@
                 "+.youtu.be",
                 "+.googlevideo.com",
                 "+.ytimg.com"
+                "+.tradingview.com",
+                "+.missav.ws",
+                "+.netflav.com",
+                "+.cmegroup.com",
+                "+.cboe.com"
             )
         }
     }

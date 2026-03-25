@@ -2,6 +2,7 @@
 
 Chinese operation guide:
 
+- [doc/TradeNet-Deployment.zh-CN.md](doc/TradeNet-Deployment.zh-CN.md)
 - [doc/Clash-Verge-SplitRouting.zh-CN.md](doc/Clash-Verge-SplitRouting.zh-CN.md)
 
 Current split mode is designed around `Mihomo` TUN plus a local `WireGuard` outbound over `udp2raw`.
@@ -27,6 +28,13 @@ Files for this mode:
 - `TradeNet.SplitRouting.psd1`: active local profile
 - `Build-TradeNetMihomoConfig.ps1`: renders and validates the Mihomo YAML
 - `mihomo\tradenet-split.yaml`: generated runtime config
+
+Deployment note:
+
+- `deploy\Install-TradeNetClient.ps1` now renders the active split profile from
+  `TradeNet.SplitRouting.example.psd1`, overlays machine-specific values from
+  `TradeNet.Deployment.psd1`, validates the generated YAML, and can optionally
+  sync it into the imported Clash Verge local profile.
 
 Current routing strategy:
 
