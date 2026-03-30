@@ -19,11 +19,14 @@ It is designed for:
 - `Register-TradeNetWatchdog.ps1`: registers the Windows boot watchdog task
 - `Unregister-TradeNetWatchdog.ps1`: removes the Windows boot watchdog task
 - `Build-TradeNetMihomoConfig.ps1`: renders and validates Mihomo split-routing YAML
+- `Build-TradeNetClashConfig.ps1`: renders a pure `TradeNet` Clash profile for standalone import
 - `deploy/server/install-tradenet-server.sh`: Linux VPS installer
+- `deploy/server/install-tradenet-tcp-fallback.sh`: optional TCP fallback installer for mobile subscription
 - `deploy/Deploy-TradeNetServer.ps1`: uploads and runs the VPS installer over SSH
 - `deploy/Install-TradeNetClient.ps1`: renders local `TradeNet.Config.psd1` and
   `TradeNet.SplitRouting.psd1`
 - `deploy/Setup-TradeNet.ps1`: one-command server + client bootstrap
+- `clash-tcp-fallback.yaml`: sanitized mobile subscription template
 - `contrib/hysteria2.sh`: standalone Hysteria2 installer provided as an additional
   reference script
 - `doc/`: supplementary installation notes and operator-facing reference documents
@@ -82,13 +85,22 @@ see:
 The VPS installer will:
 
 - install WireGuard and supporting packages
-- install or reuse `udp2raw`
+- install or reuse `udp2raw` and auto-download the standard Linux release archive when needed
 - generate server/client WireGuard keys if not provided
 - write `/etc/wireguard/wg0.conf`
 - write `/etc/systemd/system/udp2raw.service`
 - optionally manage firewall rules and sysctl tuning in a strong-intervention mode
 - enable `wg-quick@wg0` and `udp2raw`
 - verify listeners and export reusable client artifacts under `/opt/tradenet/artifacts`
+
+Optional mobile fallback:
+
+- `deploy/server/install-tradenet-tcp-fallback.sh` can install a small `shadowsocks-libev + nginx`
+  stack on the same VPS
+- the script publishes a Clash-compatible subscription YAML over HTTP for phone/iPad import
+- the script also writes a reusable summary, a subscription copy, and a short mobile guide under
+  `/opt/tradenet/artifacts`
+- use the committed `clash-tcp-fallback.yaml` only as a template; do not commit real passwords
 
 ### Client
 
@@ -97,6 +109,7 @@ The Windows client installer will:
 - generate `TradeNet.Config.psd1`
 - generate `TradeNet.SplitRouting.psd1`
 - write a reusable WireGuard import file to `artifacts\client-wireguard.conf`
+- optionally build a pure `TradeNet` Clash profile via `Build-TradeNetClashConfig.ps1`
 - run preflight checks for local binaries
 - optionally install or replace the local WireGuard tunnel service when explicitly enabled
 - optionally install a SYSTEM-level watchdog scheduled task for boot autostart and crash recovery

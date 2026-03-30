@@ -52,13 +52,13 @@ $environment = [ordered]@{
     TRADENET_UDP2RAW_MODE           = $profile.Server.Udp2rawMode
     TRADENET_CLIENT_WG_HOST         = $profile.Server.ClientWireGuardHost
     TRADENET_CLIENT_WG_PORT         = [string]$profile.Server.ClientWireGuardPort
-    TRADENET_MANAGE_FIREWALL        = [string][bool]$profile.Server.Deployment.ManageFirewall
+    TRADENET_MANAGE_FIREWALL        = if ([bool]$profile.Server.Deployment.ManageFirewall) { "true" } else { "false" }
     TRADENET_FIREWALL_BACKEND       = $profile.Server.Deployment.FirewallBackend
-    TRADENET_RESET_FIREWALL         = [string][bool]$profile.Server.Deployment.ResetFirewall
+    TRADENET_RESET_FIREWALL         = if ([bool]$profile.Server.Deployment.ResetFirewall) { "true" } else { "false" }
     TRADENET_SSH_PORT               = [string]$profile.Server.Deployment.SshPort
-    TRADENET_MANAGE_SYSCTL          = [string][bool]$profile.Server.Deployment.ManageSysctl
-    TRADENET_APPLY_GATEWAY_TUNING   = [string][bool]$profile.Server.Deployment.ApplyGatewayTuning
-    TRADENET_VERIFY_AFTER_INSTALL   = [string][bool]$profile.Server.Deployment.VerifyAfterInstall
+    TRADENET_MANAGE_SYSCTL          = if ([bool]$profile.Server.Deployment.ManageSysctl) { "true" } else { "false" }
+    TRADENET_APPLY_GATEWAY_TUNING   = if ([bool]$profile.Server.Deployment.ApplyGatewayTuning) { "true" } else { "false" }
+    TRADENET_VERIFY_AFTER_INSTALL   = if ([bool]$profile.Server.Deployment.VerifyAfterInstall) { "true" } else { "false" }
 }
 
 $job = [ordered]@{

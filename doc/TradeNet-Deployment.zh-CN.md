@@ -17,6 +17,13 @@
 - VPS 端：安装 WireGuard、安装或复用 `udp2raw`、写服务配置、开机自启、导出客户端产物
 - Windows 客户端：生成 `TradeNet.Config.psd1`、生成 `TradeNet.SplitRouting.psd1`、构建 `mihomo\tradenet-split.yaml`、校验 Mihomo YAML、可选同步到 Clash Verge 已导入的本地 profile、可选注册开机 watchdog
 
+另外还有两条补充脚本：
+
+- `Build-TradeNetClashConfig.ps1`
+  直接基于 `TradeNet.SplitRouting.psd1` 生成“纯 TradeNet 分流”的 Clash 配置，适合导入为 `TradeNet2`
+- `deploy\server\install-tradenet-tcp-fallback.sh`
+  在同一台 VPS 上额外起一个 TCP fallback 节点，并导出手机可导入的订阅
+
 当前仍然需要人工完成的部分：
 
 - 购买并拿到 VPS 的公网 IP、SSH 端口、账号、密码
@@ -214,6 +221,8 @@ python --version
 
 这个项目当前不会自动帮你下载 Windows 版 `udp2raw_mp.exe`。
 
+但 VPS 端部署脚本现在已经会在 Linux 服务器上自动下载并安装 `udp2raw`，默认使用官方发布的归档包。
+
 你需要人工下载并放到固定路径，例如：
 
 ```text
@@ -361,6 +370,21 @@ Copy-Item .\TradeNet.Deployment.example.psd1 .\TradeNet.Deployment.psd1
 
 里追加，而不用改脚本。
 
+如果是“某些 API 必须走本地直连”，规则写法要直接指向 `DIRECT`，例如：
+
+```powershell
+AdditionalRules = @(
+    "DOMAIN-SUFFIX,api.deepseek.com,DIRECT",
+    "DOMAIN-SUFFIX,platform.deepseek.com,DIRECT",
+    "DOMAIN-SUFFIX,deepseek.com,DIRECT"
+)
+```
+
+注意：
+
+- 这种本地直连 API 不要加进 `AdditionalFallbackDomains`
+- 否则 DNS 仍会被当成需要走 `TradeNet` 的域名处理
+
 ## 6. 自动化部署命令
 
 ### 6.1 一次性完成 VPS + Client
@@ -403,6 +427,48 @@ powershell -ExecutionPolicy Bypass -File .\deploy\Setup-TradeNet.ps1 -SkipServer
 powershell -ExecutionPolicy Bypass -File .\deploy\Install-TradeNetClient.ps1
 ```
 
+### 6.4 生成纯 TradeNet 的 Clash 配置
+
+如果你已经有 `TradeNet.SplitRouting.psd1`，想额外生成一份干净的本地 Clash profile，可以执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Build-TradeNetClashConfig.ps1
+```
+
+默认输出：
+
+- `mihomo\tradenet-clash-merged.yaml`
+
+注意：
+
+- 这份文件现在是“纯 TradeNet 配置”，不会再混入现有机场节点
+- 它不会读取你当前正在使用的机场 profile，只复用 `TradeNet.SplitRouting.psd1` 对应的分流结果
+- 如果你想在 Clash Verge 里单独保留一个干净 profile，推荐导入后命名为 `TradeNet2`
+
+### 6.5 部署 TCP fallback 订阅
+
+这条脚本是独立的 VPS 侧补充脚本，不会自动跟 `Setup-TradeNet.ps1` 一起执行。
+
+最少需要这 3 个环境变量：
+
+- `TRADENET_TCP_PUBLIC_ENDPOINT`
+- `TRADENET_TCP_SS_PASSWORD`
+- `TRADENET_TCP_SUBSCRIPTION_TOKEN`
+
+示例：
+
+```bash
+TRADENET_TCP_PUBLIC_ENDPOINT=154.51.40.118 \
+TRADENET_TCP_SS_PASSWORD='replace-with-strong-password' \
+TRADENET_TCP_SUBSCRIPTION_TOKEN='replace-with-random-token' \
+bash ./deploy/server/install-tradenet-tcp-fallback.sh
+```
+
+执行完成后，服务器会在下面两个位置给出结果：
+
+- HTTP 订阅地址：`http://<PUBLIC_ENDPOINT>/<prefix>-<token>.yaml`
+- 服务器产物目录：`/opt/tradenet/artifacts/`
+
 ## 7. 自动化部署后会产出什么
 
 服务器部署成功后，仓库里的 `artifacts\` 目录通常会有：
@@ -413,6 +479,12 @@ powershell -ExecutionPolicy Bypass -File .\deploy\Install-TradeNetClient.ps1
 - `server-summary.txt`
 - `server-install.stdout.log`
 - `server-install.stderr.log`
+
+如果你额外部署了 TCP fallback，服务器 `/opt/tradenet/artifacts/` 下还会看到：
+
+- `tcp-fallback-summary.txt`
+- `tcp-fallback-subscription.yaml`
+- `TradeNet2-Mobile-Subscription.md`
 
 客户端部署成功后，会生成：
 
@@ -426,6 +498,7 @@ powershell -ExecutionPolicy Bypass -File .\deploy\Install-TradeNetClient.ps1
 - `TradeNet.Config.psd1` 是本机运行时配置
 - `TradeNet.SplitRouting.psd1` 是分流源配置
 - `mihomo\tradenet-split.yaml` 是实际导入 Clash Verge 的 YAML
+- `mihomo\tradenet-clash-merged.yaml` 是可单独导入的“纯 TradeNet” Clash 配置
 
 ## 8. 第一次接入 Clash Verge
 
@@ -542,7 +615,7 @@ powershell -ExecutionPolicy Bypass -File .\stop-tradenet.ps1
 
 重点路径：
 
-- `C:\Users\<你的用户名>\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev\logs\service\service_latest.log`
+- `C:\Users\<你的用户名>\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev\logs\sidecar\sidecar_latest.log`
 
 如果你看到类似：
 
@@ -561,6 +634,8 @@ powershell -ExecutionPolicy Bypass -File .\stop-tradenet.ps1
 Get-Process -Name udp2raw_mp
 Get-NetUDPEndpoint -LocalAddress 127.0.0.1 -LocalPort 24008
 ```
+
+如果你为了绕过旧进程占用，手工把本地监听端口改过，例如改到 `24009`，这里也要改成对应端口检查。
 
 ### 10.4 看 VPS 端健康快照
 
@@ -641,6 +716,35 @@ Get-NetUDPEndpoint -LocalAddress 127.0.0.1 -LocalPort 24008
 
 - `artifacts\server-summary.txt`
 - `artifacts\server-health.txt`
+
+### 11.6 `wg` 有握手，但海外站点还是不通
+
+优先在 VPS 上检查这三件事：
+
+```bash
+sysctl net.ipv4.ip_forward
+iptables -t nat -L POSTROUTING -n -v
+wg show wg0
+```
+
+如果出现下面这种组合：
+
+- `wg show wg0` 能看到最新握手
+- `net.ipv4.ip_forward = 0`
+- `iptables -t nat` 里的 `MASQUERADE` 计数长期是 `0`
+
+那就说明隧道握手起来了，但 VPS 没把 WireGuard 流量真正转发到公网。
+
+处理方式：
+
+- 先更新到当前仓库版本
+- 然后重新执行一次：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\Deploy-TradeNetServer.ps1
+```
+
+当前版本已经修复了旧部署脚本里布尔参数大小写导致的 `sysctl / firewall / verify` 不生效问题。
 
 ## 12. 这一版自动化现在的边界
 

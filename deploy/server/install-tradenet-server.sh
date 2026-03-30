@@ -15,7 +15,7 @@ log() {
 }
 
 to_bool() {
-  case "${1:-false}" in
+  case "$(printf '%s' "${1:-false}" | tr '[:upper:]' '[:lower:]')" in
     1|true|TRUE|yes|YES|on|ON) return 0 ;;
     *) return 1 ;;
   esac
@@ -51,8 +51,39 @@ ensure_udp2raw() {
   fi
 
   require_value "TRADENET_UDP2RAW_DOWNLOAD_URL" "${UDP2RAW_DOWNLOAD_URL}"
-  curl -fsSL "${UDP2RAW_DOWNLOAD_URL}" -o "${UDP2RAW_BINARY_PATH}"
-  chmod +x "${UDP2RAW_BINARY_PATH}"
+  mkdir -p "$(dirname "${UDP2RAW_BINARY_PATH}")"
+
+  local tmp_dir
+  local tmp_archive
+  tmp_dir="$(mktemp -d)"
+  tmp_archive="${tmp_dir}/udp2raw.download"
+  trap 'rm -rf "${tmp_dir}"' RETURN
+
+  curl -fsSL "${UDP2RAW_DOWNLOAD_URL}" -o "${tmp_archive}"
+
+  if tar -tzf "${tmp_archive}" >/dev/null 2>&1; then
+    local archive_entry
+    case "$(uname -m)" in
+      x86_64|amd64)
+        archive_entry="udp2raw_amd64"
+        ;;
+      i386|i686)
+        archive_entry="udp2raw_x86"
+        ;;
+      armv7l|armv6l|armhf)
+        archive_entry="udp2raw_arm"
+        ;;
+      *)
+        echo "Unsupported architecture for udp2raw archive: $(uname -m)" >&2
+        exit 1
+        ;;
+    esac
+
+    tar -xzf "${tmp_archive}" -C "${tmp_dir}" "${archive_entry}"
+    install -m 0755 "${tmp_dir}/${archive_entry}" "${UDP2RAW_BINARY_PATH}"
+  else
+    install -m 0755 "${tmp_archive}" "${UDP2RAW_BINARY_PATH}"
+  fi
 }
 
 generate_key_if_missing() {
@@ -120,7 +151,7 @@ configure_firewall() {
   case "${backend}" in
     ufw)
       if to_bool "${RESET_FIREWALL}"; then
-        yes | ufw reset >/dev/null
+        ufw --force reset >/dev/null
       fi
       ufw allow "${SSH_PORT}/tcp" >/dev/null
       if [[ "${UDP2RAW_MODE}" == "faketcp" ]]; then
@@ -128,7 +159,7 @@ configure_firewall() {
       else
         ufw allow "${UDP2RAW_LISTEN_PORT}/udp" >/dev/null
       fi
-      yes | ufw enable >/dev/null
+      ufw --force enable >/dev/null
       ;;
     firewalld)
       systemctl enable --now firewalld >/dev/null
@@ -241,7 +272,8 @@ PERSISTENT_KEEPALIVE="${TRADENET_PERSISTENT_KEEPALIVE:-25}"
 CLIENT_WG_HOST="${TRADENET_CLIENT_WG_HOST:-127.0.0.1}"
 CLIENT_WG_PORT="${TRADENET_CLIENT_WG_PORT:-24008}"
 UDP2RAW_BINARY_PATH="${TRADENET_UDP2RAW_BINARY_PATH:-/usr/local/bin/udp2raw}"
-UDP2RAW_DOWNLOAD_URL="${TRADENET_UDP2RAW_DOWNLOAD_URL:-}"
+DEFAULT_UDP2RAW_DOWNLOAD_URL="https://github.com/wangyu-/udp2raw/releases/download/20230206.0/udp2raw_binaries.tar.gz"
+UDP2RAW_DOWNLOAD_URL="${TRADENET_UDP2RAW_DOWNLOAD_URL:-${DEFAULT_UDP2RAW_DOWNLOAD_URL}}"
 UDP2RAW_PASSWORD="${TRADENET_UDP2RAW_PASSWORD:-}"
 UDP2RAW_LISTEN_PORT="${TRADENET_UDP2RAW_LISTEN_PORT:-4000}"
 UDP2RAW_MODE="${TRADENET_UDP2RAW_MODE:-faketcp}"

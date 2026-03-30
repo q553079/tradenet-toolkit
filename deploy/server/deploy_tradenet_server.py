@@ -13,7 +13,7 @@ def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: deploy_tradenet_server.py <job.json>")
 
-    job = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    job = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8-sig"))
     server = job["server"]
     local = job["local"]
 

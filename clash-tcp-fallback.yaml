@@ -1,0 +1,28 @@
+mixed-port: 7890
+allow-lan: true
+mode: rule
+log-level: info
+ipv6: false
+
+# Template only.
+# Fill server / password with your real deployed values before importing.
+
+proxies:
+  - name: TradeNet_TCP
+    type: ss
+    server: __FILL_SERVER__
+    port: 443
+    cipher: aes-256-gcm
+    password: __FILL_PASSWORD__
+    udp: false
+
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies:
+      - TradeNet_TCP
+      - DIRECT
+
+rules:
+  - GEOIP,CN,DIRECT
+  - MATCH,PROXY
