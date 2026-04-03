@@ -23,6 +23,10 @@
   直接基于 `TradeNet.SplitRouting.psd1` 生成“纯 TradeNet 分流”的 Clash 配置，适合导入为 `TradeNet2`
 - `deploy\server\install-tradenet-tcp-fallback.sh`
   在同一台 VPS 上额外起一个 TCP fallback 节点，并导出手机可导入的订阅
+- `deploy\Initialize-WindowsSshTarget.ps1`
+  把一台 Windows 机器初始化成可 SSH 登录的部署目标，适合后续让控制端推送脚本或产物
+- `deploy\Retry-Initialize-WithPublicDns.ps1` / `deploy\Restore-DnsFromBackup.ps1`
+  当目标机解析微软或 GitHub 域名不稳定，导致 OpenSSH 安装失败时，先临时切到公共 DNS 重试，再恢复原 DNS
 
 当前仍然需要人工完成的部分：
 

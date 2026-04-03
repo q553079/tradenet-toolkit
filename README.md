@@ -26,6 +26,10 @@ It is designed for:
 - `deploy/Install-TradeNetClient.ps1`: renders local `TradeNet.Config.psd1` and
   `TradeNet.SplitRouting.psd1`
 - `deploy/Setup-TradeNet.ps1`: one-command server + client bootstrap
+- `deploy/Initialize-WindowsSshTarget.ps1`: prepares a Windows machine for SSH-based deployment
+- `deploy/Initialize-WindowsSshTarget-OneClick.ps1` and `.cmd`: guided wrapper for first-time Windows target bootstrap
+- `deploy/Retry-Initialize-WithPublicDns.ps1` and `.cmd`: retries the Windows target bootstrap with temporary public DNS
+- `deploy/Restore-DnsFromBackup.ps1`: restores the original DNS after the retry flow
 - `clash-tcp-fallback.yaml`: sanitized mobile subscription template
 - `contrib/hysteria2.sh`: standalone Hysteria2 installer provided as an additional
   reference script
@@ -114,6 +118,15 @@ The Windows client installer will:
 - optionally install or replace the local WireGuard tunnel service when explicitly enabled
 - optionally install a SYSTEM-level watchdog scheduled task for boot autostart and crash recovery
 - validate `mihomo\tradenet-split.yaml`
+
+### Windows SSH Target
+
+If you need to turn another Windows machine into an SSH deployment target:
+
+- run `deploy/Initialize-WindowsSshTarget-OneClick.ps1` or the matching `.cmd` wrapper as administrator
+- use `deploy/Initialize-WindowsSshTarget.ps1` directly when you want non-interactive parameters
+- if OpenSSH installation fails because the machine cannot resolve Microsoft or GitHub endpoints, retry with `deploy/Retry-Initialize-WithPublicDns.ps1`
+- restore the previous DNS settings afterward with `deploy/Restore-DnsFromBackup.ps1`
 
 ## Repository safety
 

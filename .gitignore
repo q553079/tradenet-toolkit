@@ -3,7 +3,9 @@ state/
 mihomo/
 artifacts/
 __pycache__/
+.codex_tmp/
 *.pyc
+*.lnk
 
 TradeNet.Config.psd1
 TradeNet.SplitRouting.psd1
