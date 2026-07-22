@@ -57,6 +57,7 @@ proxies:
     cipher: ${SS_CIPHER}
     password: ${SS_PASSWORD}
     udp: false
+    tfo: true
 
 proxy-groups:
   - name: PROXY
@@ -162,12 +163,22 @@ cat > /etc/shadowsocks-libev/config.json <<EOF
   "server": "0.0.0.0",
   "server_port": ${SS_PORT},
   "password": "${SS_PASSWORD}",
-  "timeout": 300,
+  "timeout": 600,
   "method": "${SS_CIPHER}",
   "mode": "tcp_only",
-  "fast_open": false
+  "fast_open": true,
+  "reuse_port": true
 }
 EOF
+
+cat > /etc/sysctl.d/99-tradenet-tcp.conf <<'EOF'
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_keepalive_time = 60
+net.ipv4.tcp_keepalive_intvl = 10
+net.ipv4.tcp_keepalive_probes = 6
+EOF
+sysctl --system >/dev/null
 
 write_subscription
 write_artifacts
