@@ -76,7 +76,85 @@ LOL 示例适用于腾讯 / WeGame 国服。国际服可能需要不同分流。
 端口没有通用固定要求，系统代理与实际监听端口一致即可。
 服务不可用、重复内核或端口冲突需要分别排查，不应通过不断修改 DNS 掩盖。
 
+## 可开关广告过滤与应用分流
+
+2026-10-03 在保留上述 DNS、TUN 与热点拓扑的基础上，加入以下独立增强：
+
+| Clash 分组 | 默认选择 | 用途 |
+| --- | --- | --- |
+| `AdBlock` | `REJECT` | 阻止广告规则集命中的域名；选 `PASS` 关闭过滤 |
+| `Trading` | 已有稳定 TCP 节点 | Rithmic / ATAS 相关进程和域名，手动选择节点 |
+| `AI` | 已有 `PROXY` 组 | OpenAI / ChatGPT / Codex 域名及桌面进程 |
+
+`AdBlock` 使用 [217heidai/adblockfilters](https://github.com/217heidai/adblockfilters)
+提供的 Mihomo 域名 MRS 规则集，每 28800 秒（8 小时）尝试更新，下载走已有 `PROXY`。
+项目只引用规则下载地址，不提交下载后的规则数据。
+它复用 override-rules 所采用的规则来源之一，不引入整套覆写脚本。
+
+本机目前只有一个可用代理节点，因此没有添加自动测速或负载均衡组。
+`Trading` 默认固定使用原来的 TCP 节点，`PROXY` 作为可手动选择的另一项；
+公开示例只写通用 `PROXY`，如需固定节点，应把自己的稳定节点名放在选项第一位。
+代理组首次选择及之后缓存的选择都应在 Clash 中核对。
+这次没有登录交易账号或测试实时行情，不把规则加载成功当作交易连接验收。
+
+按下面顺序合并到**已有**增强配置，不要覆盖其他规则或把多个 `prepend` 原样拼成重复 YAML 键：
+
+1. [Merge 片段](examples/clash-adblock-merge.example.yaml)：添加 `rule-providers.tradenet-ads`。
+2. [Groups 片段](examples/clash-services-groups.example.yaml)：把三个组加入已有 `prepend` 列表。
+3. [Rules 片段](examples/clash-services-rules.example.yaml)：保留 LOL、WeGame 等直连例外在前，
+   替换原先相同 AI 匹配项的目标，并加入交易及广告匹配项。
+
+有效规则顺序为：
+
+```text
+LOL / WeGame 等直连例外
+→ AI / 交易等明确应用规则
+→ RULE-SET,tradenet-ads,AdBlock
+→ 原有国内分流
+→ 原有最终兜底
+```
+
+应用例外优先，意味着这些进程或域名下的广告也可能放行，目的是降低正常登录及连接被误拦的风险。
+匹配广告规则后的 `PASS` 会继续匹配后面的规则；不要用 `DIRECT` 代替这个关闭开关，
+否则需要代理的域名可能被强制直连。
+手机共享 Meta 时也遵循域名规则，手机应用不具备主机上的进程名匹配保护。
+遇到正常功能异常，可先选 `PASS` 对比，再将已确认的必要域名以合适出口加到广告规则前。
+
+已完成配置语法校验、运行时规则集加载和测试域名的广告规则命中检查，
+以及腾讯连接、LOL 官网、国外代理网站的访问检查。
+这些检查不能证明所有 App 广告都能拦截，或所有应用功能均不受影响。
+
+只读查看规则集是否加载，可使用 Clash 界面的规则集和连接记录；
+实际使用中应核对命中的规则、分组和出口。
+关闭广告过滤只需选择 `AdBlock → PASS`，无需关闭 TUN 或改动热点。
+完全撤销增强时，恢复修改前备份的 Merge / Groups / Rules，并在 Clash 中重新加载当前订阅。
+
 ## 切换热点上游
+
+### 一键开启兼容热点
+
+打开 Clash 并开启 TUN 后，双击项目中的
+[`contrib/Start-ClashHotspot.cmd`](../contrib/Start-ClashHotspot.cmd)。
+脚本动态查找当前 Meta 网卡，将其设为热点上游，默认使用 2.4 GHz。
+热点名称和密码沿用 Windows 已保存的配置；运行时会重启热点，手机需重新连接。
+网卡名称不同的机器可通过 `-UpstreamAdapterName` 和 `-WifiAdapterName` 指定。
+没有安装随 Clash 启停自动切换的任务。
+
+2026-10-03 在 Clash 重启后，本机曾出现热点无法开启。
+当时无线电显示 On，但启动返回 `WiFiDeviceOff`，Wi-Fi Direct 事件记录启动失败。
+重新启动无线服务和开关无线电没有恢复；将原 5 GHz 热点改为 2.4 GHz 后启动成功。
+这是本机的兼容性排障结果，不能据此断言所有 5 GHz 热点均不可用。
+
+```powershell
+# From the project root, using Windows PowerShell 5.1:
+.\contrib\Start-ClashHotspot.ps1
+# To restore direct hotspot sharing, use the actual physical adapter name:
+.\contrib\Start-ClashHotspot.ps1 -UpstreamAdapterName 'Ethernet'
+```
+
+第二条命令中的 `Ethernet` 应替换为实际网卡名，例如 `以太网`。
+脚本启动失败会尝试恢复原频段；它不能自动确定之前的热点上游，
+如需恢复，应显式指定原物理网卡。
 
 ### 日常使用
 
@@ -190,3 +268,6 @@ Windows 热点共享状态不在 Clash YAML 中；换电脑后必须重新选择
 - [Microsoft：CreateFromConnectionProfile 选择公共上游连接](https://learn.microsoft.com/en-us/uwp/api/windows.networking.networkoperators.networkoperatortetheringmanager.createfromconnectionprofile)
 - [Microsoft：StartTetheringAsync 与停止后重新启动的说明](https://learn.microsoft.com/en-us/uwp/api/windows.networking.networkoperators.networkoperatortetheringmanager.starttetheringasync)
 - [Mihomo DNS 配置](https://wiki.metacubex.one/config/dns/)
+- [Mihomo 规则集及更新配置](https://wiki.metacubex.one/config/rule-providers/)
+- [Mihomo PASS 内置策略](https://wiki.metacubex.one/config/proxies/built-in/)
+- [powerfullz/override-rules](https://github.com/powerfullz/override-rules)

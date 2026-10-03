@@ -1,0 +1,17 @@
+# Merge these items into the existing Clash Verge Groups enhancement.
+prepend:
+  - name: AdBlock
+    type: select
+    proxies:
+      - REJECT
+      - PASS
+  - name: Trading
+    type: select
+    proxies:
+      - PROXY
+  - name: AI
+    type: select
+    proxies:
+      - PROXY
+append: []
+delete: []

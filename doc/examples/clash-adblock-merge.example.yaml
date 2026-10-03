@@ -1,0 +1,11 @@
+# Merge into the existing Clash Verge profile Merge enhancement.
+# PROXY must already exist. Keeps existing DNS/TUN configuration intact.
+rule-providers:
+  tradenet-ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/217heidai/adblockfilters/main/rules/adblockmihomo.mrs
+    path: ./ruleset/tradenet-ads.mrs
+    interval: 28800
+    proxy: PROXY

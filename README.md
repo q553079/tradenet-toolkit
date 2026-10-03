@@ -83,7 +83,8 @@ see:
 - [doc/Clash-Verge-SplitRouting.zh-CN.md](doc/Clash-Verge-SplitRouting.zh-CN.md)
 
 For Windows mobile hotspot compatibility with Clash TUN, including the tested
-Meta upstream setup, sanitized DNS/game rules, and switching back to Ethernet:
+Meta upstream setup, one-click hotspot launcher, optional ad filtering/application
+groups, sanitized DNS/game rules, and switching back to Ethernet:
 
 - [doc/Clash-TUN-Hotspot.zh-CN.md](doc/Clash-TUN-Hotspot.zh-CN.md)
 
