@@ -1,5 +1,10 @@
 # TradeNet Clash Verge 分流配置与启动说明
 
+本文介绍 WireGuard + udp2raw 部署路径。如果你使用独立的 Clash TCP 节点，
+需要处理 Windows 热点、TUN 与 LOL 登录冲突，请看
+[Clash TUN 与 Windows 移动热点配置记录](Clash-TUN-Hotspot.zh-CN.md)。
+两种方案的节点和策略组不同，不应直接互相覆盖。
+
 如果你现在是在给一台新机器做完整落地，先看：
 
 - [TradeNet-Deployment.zh-CN.md](D:/TradeNet/doc/TradeNet-Deployment.zh-CN.md)

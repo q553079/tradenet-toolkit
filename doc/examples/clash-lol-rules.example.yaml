@@ -1,0 +1,21 @@
+# Clash Verge profile Rules fragment, not a complete Mihomo configuration.
+# Intended for the mainland-China Tencent/WeGame version of League of Legends.
+# Prepend these rules ahead of broad proxy rules; preserve other application rules.
+prepend:
+  - PROCESS-NAME,wegame.exe,DIRECT
+  - PROCESS-NAME,wegame_env.exe,DIRECT
+  - PROCESS-NAME,tcls_core.exe,DIRECT
+  - PROCESS-NAME,LeagueClient.exe,DIRECT
+  - PROCESS-NAME,LeagueClientUx.exe,DIRECT
+  - PROCESS-NAME,LeagueClientUxRender.exe,DIRECT
+  - PROCESS-NAME,League of Legends.exe,DIRECT
+  - PROCESS-NAME,RiotClientServices.exe,DIRECT
+  - PROCESS-NAME,RiotClientUx.exe,DIRECT
+  - PROCESS-NAME,lol.launcher.exe,DIRECT
+  - PROCESS-NAME,TenioDL.exe,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  # Optional: replace this with the actual TCLS launcher path before enabling.
+  # Avoid a generic PROCESS-NAME,client.exe rule, which can match unrelated apps.
+  # - PROCESS-PATH,C:\Games\LeagueOfLegends\TCLS\client.exe,DIRECT
+append: []
+delete: []

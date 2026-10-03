@@ -1,0 +1,48 @@
+# Clash Verge profile Merge fragment, not a complete subscription.
+# Requires an existing PROXY group; replace PROXY with your real group name.
+# Choose unused local ports. This file does not configure Windows sharing.
+mixed-port: 7901
+mode: rule
+find-process-mode: strict
+
+tun:
+  enable: true
+  stack: gvisor
+  auto-route: true
+  auto-detect-interface: true
+  strict-route: false
+  dns-hijack:
+    - any:53
+    - tcp://any:53
+
+dns:
+  enable: true
+  ipv6: false
+  listen: 127.0.0.1:1053
+  enhanced-mode: redir-host
+  respect-rules: true
+  nameserver-policy:
+    '+.qq.com':
+      - '223.5.5.5#DIRECT'
+      - '119.29.29.29#DIRECT'
+    '+.wegame.com':
+      - '223.5.5.5#DIRECT'
+      - '119.29.29.29#DIRECT'
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  fallback:
+    - https://1.1.1.1/dns-query#PROXY
+    - https://dns.google/dns-query#PROXY
+  proxy-server-nameserver:
+    - https://dns.alidns.com/dns-query
+    - https://doh.pub/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    ipcidr:
+      - 240.0.0.0/4
+      - 0.0.0.0/32
